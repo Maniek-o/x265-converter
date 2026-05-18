@@ -38,6 +38,30 @@ function New-UnraidBrandIcon {
     $textRect = New-Object System.Drawing.RectangleF(0, 118, $size, 102)
     $g.DrawString('UNRAID', $font, $textBrush, $textRect, $sf)
 
+    # Small film clapper accent (bottom-right)
+    $plateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(220, 34, 39, 46))
+    $plateRect = New-Object System.Drawing.Rectangle(154, 164, 78, 52)
+    $g.FillRectangle($plateBrush, $plateRect)
+
+    $slateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(240, 20, 24, 28))
+    $slatePts = @(
+        (New-Object System.Drawing.Point(150, 155)),
+        (New-Object System.Drawing.Point(228, 141)),
+        (New-Object System.Drawing.Point(236, 163)),
+        (New-Object System.Drawing.Point(158, 177))
+    )
+    $g.FillPolygon($slateBrush, $slatePts)
+
+    $stripePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(220, 255, 255, 255), 3)
+    $g.DrawLine($stripePen, 160, 172, 173, 149)
+    $g.DrawLine($stripePen, 176, 169, 189, 146)
+    $g.DrawLine($stripePen, 192, 166, 205, 143)
+    $g.DrawLine($stripePen, 208, 163, 221, 140)
+
+    $detailPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(150, 255, 255, 255), 2)
+    $g.DrawLine($detailPen, 162, 188, 224, 188)
+    $g.DrawLine($detailPen, 162, 202, 214, 202)
+
     if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
     }
@@ -55,6 +79,10 @@ function New-UnraidBrandIcon {
         $font.Dispose()
         $textBrush.Dispose()
         $sf.Dispose()
+        $plateBrush.Dispose()
+        $slateBrush.Dispose()
+        $stripePen.Dispose()
+        $detailPen.Dispose()
     }
 }
 
