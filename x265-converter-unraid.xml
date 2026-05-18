@@ -12,7 +12,7 @@
   <Overview>🎬 Webowy konwerter video do HEVC/x265 z interfejsem webowym. Kolejka pracy, podgląd live, turbo-mode. Konwersja działa bezpośrednio na maszynie Unraid przy użyciu ffmpeg.</Overview>
   <Category>Video</Category>
   <WebUI>http://[IP]:[PORT:3001]/</WebUI>
-  <TemplateURL></TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Maniek-o/x265-converter/main/x265-converter-unraid.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Maniek-o/x265-converter/main/icons/x265-video-clapper-v2.ico</Icon>
   <ExtraParams></ExtraParams>
   <DateInstalled></DateInstalled>
@@ -23,7 +23,7 @@
   <Config Name="Web UI Port" Target="3001" Default="3001" Mode="tcp" Description="Port interfejsu webowego" Type="Port" Display="always" Required="true" Mask="false">3001</Config>
   
   <!-- FOLDERY / VOLUME -->
-  <Config Name="Media Folder" Target="/data" Default="/mnt/user/media" Mode="rw" Description="Folder ze źródłowymi plikami video i wynikami konwersji" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="Media Folder" Target="/data" Default="/mnt/user/2x SSD/Data-x265-converter" Mode="rw" Description="Folder ze źródłowymi plikami video i wynikami konwersji" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/2x SSD/Data-x265-converter</Config>
   
   <Config Name="Temp Folder" Target="/tmp/x265-converter" Default="/mnt/user/appdata/x265-converter/tmp" Mode="rw" Description="Folder roboczy - cache, pliki tymczasowe" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/x265-converter/tmp</Config>
   
