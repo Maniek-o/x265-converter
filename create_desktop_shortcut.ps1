@@ -28,14 +28,36 @@ if (-not (Test-Path -LiteralPath $launcherPath)) {
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktopPath $shortcutName
 
-# Use a Windows media icon by default, then fallback to generic system icon.
+# Mode-specific icon selection.
 $wmploc = Join-Path $env:SystemRoot 'System32\wmploc.dll'
 $shell32 = Join-Path $env:SystemRoot 'System32\shell32.dll'
+$iconLocation = "$shell32,238"
 
-if (Test-Path -LiteralPath $wmploc) {
+if ($Mode -eq 'unraid') {
+    $avidemuxCandidates = @(
+        'C:\Program Files\Avidemux 2.8 VC++ 64bits\avidemux.exe',
+        'C:\Program Files (x86)\Avidemux 2.8 VC++ 32bits\avidemux.exe',
+        'C:\Program Files\Avidemux 2.7 VC++ 64bits\avidemux.exe',
+        'C:\Program Files (x86)\Avidemux 2.7 VC++ 32bits\avidemux.exe'
+    )
+
+    $avidemuxExe = $avidemuxCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+
+    if (-not $avidemuxExe) {
+        $possible = Get-Command avidemux* -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($possible -and (Test-Path -LiteralPath $possible.Source)) {
+            $avidemuxExe = $possible.Source
+        }
+    }
+
+    if ($avidemuxExe) {
+        $iconLocation = "$avidemuxExe,0"
+    } else {
+        # Fallback to a more network/server-like icon for Unraid mode.
+        $iconLocation = "$shell32,18"
+    }
+} elseif (Test-Path -LiteralPath $wmploc) {
     $iconLocation = "$wmploc,21"
-} else {
-    $iconLocation = "$shell32,238"
 }
 
 $shell = New-Object -ComObject WScript.Shell
