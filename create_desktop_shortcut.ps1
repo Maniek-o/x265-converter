@@ -20,46 +20,54 @@ function New-VideoClapperIcon {
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    # Background (dark neutral)
+    # Transparent canvas then rounded blue app tile.
+    $g.Clear([System.Drawing.Color]::Transparent)
+    $tileRect = New-Object System.Drawing.Rectangle(34, 26, 188, 206)
+    $tileRadius = 38
+    $tilePath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $tilePath.AddArc($tileRect.X, $tileRect.Y, $tileRadius * 2, $tileRadius * 2, 180, 90)
+    $tilePath.AddArc($tileRect.Right - ($tileRadius * 2), $tileRect.Y, $tileRadius * 2, $tileRadius * 2, 270, 90)
+    $tilePath.AddArc($tileRect.Right - ($tileRadius * 2), $tileRect.Bottom - ($tileRadius * 2), $tileRadius * 2, $tileRadius * 2, 0, 90)
+    $tilePath.AddArc($tileRect.X, $tileRect.Bottom - ($tileRadius * 2), $tileRadius * 2, $tileRadius * 2, 90, 90)
+    $tilePath.CloseFigure()
+
     $bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        (New-Object System.Drawing.Rectangle(0, 0, $size, $size)),
-        [System.Drawing.Color]::FromArgb(255, 37, 41, 48),
-        [System.Drawing.Color]::FromArgb(255, 18, 21, 27),
-        120
+        $tileRect,
+        [System.Drawing.Color]::FromArgb(255, 79, 133, 237),
+        [System.Drawing.Color]::FromArgb(255, 98, 154, 245),
+        45
     )
-    $g.FillRectangle($bgBrush, 0, 0, $size, $size)
+    $g.FillPath($bgBrush, $tilePath)
 
-    # Clapper body
-    $bodyBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 62, 66, 74))
-    $bodyRect = New-Object System.Drawing.Rectangle(44, 108, 168, 104)
-    $g.FillRectangle($bodyBrush, $bodyRect)
+    $whitePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(245, 255, 255, 255), 8)
+    $whitePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $whitePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $whitePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
 
-    # Top slate
-    $slateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 30, 33, 39))
-    $slatePts = @(
-        (New-Object System.Drawing.Point(34, 96)),
-        (New-Object System.Drawing.Point(206, 64)),
-        (New-Object System.Drawing.Point(224, 102)),
-        (New-Object System.Drawing.Point(52, 134))
+    # Play bubble at top.
+    $bubblePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(245, 255, 255, 255), 6)
+    $g.DrawEllipse($bubblePen, 112, 44, 32, 32)
+    $triangle = @(
+        (New-Object System.Drawing.Point(123, 53)),
+        (New-Object System.Drawing.Point(123, 67)),
+        (New-Object System.Drawing.Point(134, 60))
     )
-    $g.FillPolygon($slateBrush, $slatePts)
+    $triangleBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(245, 255, 255, 255))
+    $g.FillPolygon($triangleBrush, $triangle)
 
-    # White stripes on top slate
-    $stripePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(240, 255, 255, 255), 8)
-    $g.DrawLine($stripePen, 52, 123, 73, 80)
-    $g.DrawLine($stripePen, 87, 116, 108, 74)
-    $g.DrawLine($stripePen, 122, 110, 143, 68)
-    $g.DrawLine($stripePen, 157, 103, 178, 61)
+    # Dotted center guide.
+    $dotBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(220, 255, 255, 255))
+    foreach ($y in 84, 96, 108, 120, 132) {
+        $g.FillEllipse($dotBrush, 126, $y, 4, 4)
+    }
 
-    # Body details
-    $linePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(130, 255, 255, 255), 3)
-    $g.DrawLine($linePen, 60, 146, 196, 146)
-    $g.DrawLine($linePen, 60, 170, 196, 170)
-    $g.DrawLine($linePen, 60, 194, 174, 194)
+    # Scissors handles.
+    $g.DrawEllipse($whitePen, 90, 158, 20, 20)
+    $g.DrawEllipse($whitePen, 146, 158, 20, 20)
 
-    # Border for clarity
-    $borderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 255, 255, 255), 2)
-    $g.DrawRectangle($borderPen, 1, 1, $size - 3, $size - 3)
+    # Scissors blades.
+    $g.DrawLine($whitePen, 104, 168, 142, 118)
+    $g.DrawLine($whitePen, 152, 168, 114, 118)
 
     if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
@@ -75,11 +83,11 @@ function New-VideoClapperIcon {
         $g.Dispose()
         $bmp.Dispose()
         $bgBrush.Dispose()
-        $bodyBrush.Dispose()
-        $slateBrush.Dispose()
-        $stripePen.Dispose()
-        $linePen.Dispose()
-        $borderPen.Dispose()
+        $tilePath.Dispose()
+        $whitePen.Dispose()
+        $bubblePen.Dispose()
+        $triangleBrush.Dispose()
+        $dotBrush.Dispose()
     }
 }
 
