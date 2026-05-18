@@ -96,6 +96,12 @@ npm run electron
 docker build -t x265-converter:latest .
 ```
 
+### Obraz z aktualizacjami w Unraid
+Jeśli chcesz, żeby Unraid wykrywał nowe wersje i pokazywał przycisk Update, użyj obrazu publikowanego do GHCR:
+```bash
+ghcr.io/maniek-o/x265-converter:latest
+```
+
 ### Uruchomienie
 ```bash
 docker run -d \

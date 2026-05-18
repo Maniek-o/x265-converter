@@ -16,6 +16,12 @@ From the `x265-converter` folder:
 docker build -t x265-converter:latest .
 ```
 
+If you publish the image to GitHub Container Registry, use:
+
+```bash
+docker build -t ghcr.io/maniek-o/x265-converter:latest .
+```
+
 ## Run it locally
 
 ```bash
@@ -41,7 +47,7 @@ The easiest GUI path is to import the included Unraid template file and then edi
 
 1. Go to `Docker` in the Unraid UI and choose `Add Container`.
 2. Import `x265-converter-unraid.xml` if you want the fields prefilled, or set the same values manually.
-3. Set the image to `x265-converter:latest` if you built it locally on the server, or point to your registry tag if you publish it.
+3. Set the image to `ghcr.io/maniek-o/x265-converter:latest` if you want Unraid to detect new releases and show the Update button.
 4. Map port `3001` from container to host.
 5. Set the container variables:
    - `HOST=0.0.0.0`

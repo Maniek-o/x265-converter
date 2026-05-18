@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   x265-converter:
+    image: ghcr.io/maniek-o/x265-converter:latest
     build:
       context: .
       dockerfile: Dockerfile

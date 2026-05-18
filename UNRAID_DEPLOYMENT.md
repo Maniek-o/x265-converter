@@ -100,12 +100,23 @@ Jeśli nie masz gita:
 ```bash
 docker build -t x265-converter:latest .
 ```
+
+Jeśli chcesz, żeby Unraid pokazywał przycisk Update, użyj obrazu publikowanego do GHCR:
+```bash
+ghcr.io/maniek-o/x265-converter:latest
+```
 ⏱️ Pierwsze budowanie może trwać 3-5 minut (pobieranie pakietów)
 
 ### Krok 4: Tworzenie folderu dla temp i appdata
 ```bash
 mkdir -p /mnt/user/appdata/x265-converter/tmp
 chmod 777 /mnt/user/appdata/x265-converter/tmp
+```
+
+### Krok 4b: Ręczne odświeżenie z GHCR
+```bash
+docker pull ghcr.io/maniek-o/x265-converter:latest
+docker restart x265-converter
 ```
 
 ### Krok 5: Uruchomienie kontenera

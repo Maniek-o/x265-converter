@@ -1,5 +1,10 @@
 FROM node:20-bookworm-slim
 
+LABEL org.opencontainers.image.title="x265 Converter" \
+    org.opencontainers.image.description="Web-based HEVC/x265 video converter" \
+    org.opencontainers.image.source="https://github.com/Maniek-o/x265-converter" \
+    org.opencontainers.image.vendor="Maniek-o"
+
 ENV NODE_ENV=production \
     PORT=3001 \
     HOST=0.0.0.0 \

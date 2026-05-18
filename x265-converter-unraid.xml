@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>x265 Converter</Name>
-  <Repository>x265-converter:latest</Repository>
-  <Registry></Registry>
+  <Repository>ghcr.io/maniek-o/x265-converter:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
   <Network>bridge</Network>
   <MyIP></MyIP>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/</Support>
-  <Project>https://github.com/</Project>
+  <Support>https://github.com/Maniek-o/x265-converter</Support>
+  <Project>https://github.com/Maniek-o/x265-converter</Project>
   <Overview>🎬 Webowy konwerter video do HEVC/x265 z interfejsem webowym. Kolejka pracy, podgląd live, turbo-mode. Konwersja działa bezpośrednio na maszynie Unraid przy użyciu ffmpeg.</Overview>
   <Category>Video</Category>
   <WebUI>http://[IP]:[PORT:3001]/</WebUI>
   <TemplateURL></TemplateURL>
-  <Icon></Icon>
+  <Icon>https://raw.githubusercontent.com/Maniek-o/x265-converter/main/icons/x265-video-clapper-v2.ico</Icon>
   <ExtraParams></ExtraParams>
   <DateInstalled></DateInstalled>
   <DonateText></DonateText>
