@@ -28,7 +28,7 @@ const ffprobePath = resolveBinary('ffprobe', ffprobeInstaller.path);
 
 const queueState = {
   jobs: [],
-  activeJobId: null,
+  activeJobIds: new Set(),
   nextId: 1
 };
 
@@ -75,7 +75,8 @@ app.get('/api/health', async (_req, res) => {
     instanceId: SERVER_INSTANCE_ID,
     ffmpegPath,
     ffprobePath,
-    activeJobId: queueState.activeJobId,
+    activeJobId: [...queueState.activeJobIds][0] ?? null,
+    activeJobCount: queueState.activeJobIds.size,
     queueLength: queueState.jobs.filter((job) => job.status === 'queued').length,
     cpuUsagePercent: Number(cpuMetricsState.cpuUsagePercent.toFixed(1)),
     processCpuPercent: Number(cpuMetricsState.processCpuPercent.toFixed(1)),
@@ -303,7 +304,7 @@ app.delete('/api/queue', async (_req, res) => {
   await Promise.allSettled(cleanupTasks);
 
   queueState.jobs = [];
-  queueState.activeJobId = null;
+  queueState.activeJobIds.clear();
 
   res.json({
     cleared: true,
@@ -1096,6 +1097,7 @@ function normalizeSettings(input) {
   const audioBitrateKbps = clampNumber(Number(input.audioBitrateKbps), 32, 320, 96);
   const testClipEnabled = Boolean(input.testClipEnabled);
   const smartQuality = Boolean(input.smartQuality);
+  const turboMode = Boolean(input.turboMode);
   const fpsMode = input.fpsMode === '24' ? '24' : 'source';
 
   return {
@@ -1107,6 +1109,7 @@ function normalizeSettings(input) {
     audioBitrateKbps,
     testClipEnabled,
     smartQuality,
+    turboMode,
     fpsMode
   };
 }
@@ -1404,20 +1407,20 @@ function ffprobe(sourceFile) {
 }
 
 async function runNextJob() {
-  if (queueState.activeJobId !== null) {
+  const processing = queueState.jobs.filter((job) => job.status === 'processing');
+  const turboEnabled = queueState.jobs.some((job) => job.settings?.turboMode);
+  const concurrencyLimit = turboEnabled ? 2 : 1;
+
+  if (processing.length >= concurrencyLimit) {
     return;
   }
 
-  const nextJob = queueState.jobs.find((job) => !['completed', 'skipped', 'failed', 'cancelled'].includes(job.status));
+  const nextJob = queueState.jobs.find((job) => job.status === 'queued');
   if (!nextJob) {
     return;
   }
 
-  if (nextJob.status !== 'queued') {
-    return;
-  }
-
-  queueState.activeJobId = nextJob.id;
+  queueState.activeJobIds.add(nextJob.id);
   nextJob.status = 'processing';
   nextJob.startedAt = new Date().toISOString();
 
@@ -1430,7 +1433,7 @@ async function runNextJob() {
   } finally {
     nextJob.finishedAt = new Date().toISOString();
     nextJob.process = null;
-    queueState.activeJobId = null;
+    queueState.activeJobIds.delete(nextJob.id);
     runNextJob().catch((error) => {
       console.error('Queue runner failed:', error);
     });
@@ -1532,7 +1535,13 @@ function runFfmpegCommand(job, args) {
 function buildFfmpegArgs(job) {
   const { sourceFile, outputPath, settings, metrics, probe } = job;
   const duration = Math.max(1, metrics.sourceDurationSeconds || metrics.durationSeconds || 1);
-  const threadLimit = computeThreadLimitFromPercent(settings.cpuLimitPercent);
+  const cores = Math.max(1, (os.cpus() || []).length || 1);
+  const turboEnabled = Boolean(settings.turboMode);
+  // In turbo mode each job gets half the cores (2 parallel jobs ≈ 100% CPU)
+  // In normal mode use cpuLimitPercent of all cores
+  const threadLimit = turboEnabled
+    ? Math.max(1, Math.floor(cores / 2))
+    : computeThreadLimitFromPercent(settings.cpuLimitPercent);
   const videoStream = (probe?.streams || []).find((stream) => stream.codec_type === 'video');
   const audioStream = (probe?.streams || []).find((stream) => stream.codec_type === 'audio');
 
@@ -1630,10 +1639,14 @@ function buildFfmpegArgs(job) {
         '-qp', String(sq.crf)
       );
     } else {
+      const x265Params = turboEnabled
+        ? `frame-threads=2:threads=${threadLimit}:pools=all`
+        : `threads=${threadLimit}`;
       args.push(
         '-c:v', 'libx265',
         '-preset', cpuPreset,
         '-crf', String(sq.crf),
+        '-x265-params', x265Params,
         '-tag:v', 'hvc1'
       );
     }
@@ -1654,12 +1667,16 @@ function buildFfmpegArgs(job) {
         '-bufsize', String(Math.round(videoBitrate * 2))
       );
     } else {
+      const x265Params = turboEnabled
+        ? `frame-threads=2:threads=${threadLimit}:pools=all`
+        : `threads=${threadLimit}`;
       args.push(
         '-c:v', 'libx265',
         '-preset', presetMap.cpu[settings.qualityPreset],
         '-b:v', String(videoBitrate),
         '-maxrate', String(Math.round(videoBitrate * 1.25)),
         '-bufsize', String(Math.max(60_000, Math.round(videoBitrate * 2))),
+        '-x265-params', x265Params,
         '-tag:v', 'hvc1'
       );
     }

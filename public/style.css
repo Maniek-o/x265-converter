@@ -982,3 +982,7 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* Turbo mode toggle */
+.turbo-toggle { color: var(--accent, #e07b00); font-weight: 600; }
+.turbo-toggle input:checked + span { color: var(--accent, #e07b00); }
