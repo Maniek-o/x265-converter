@@ -887,3 +887,98 @@ button:disabled {
     border-bottom: none;
   }
 }
+
+/* --- New compact layout overrides (local desktop) --- */
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.settings-head h2 {
+  margin: 0;
+}
+
+.backend-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  padding: 8px;
+  margin-bottom: 9px;
+}
+
+.cpu-mini-chart {
+  width: 150px;
+  height: 30px;
+  border: 1px solid var(--line-soft);
+  background: #f8fafc;
+}
+
+.inline-field-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.field-label-inline {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-summary-box {
+  margin-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+}
+
+.collapsible.is-collapsed {
+  display: none;
+}
+
+.queue-header-actions,
+.inline-actions,
+.settings-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.current-job-summary {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  background: #f8fbff;
+}
+
+.is-current-job td {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: #eef5ff;
+}
+
+#queueControls[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .inline-field-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .backend-status-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cpu-mini-chart {
+    width: 100%;
+  }
+}

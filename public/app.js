@@ -16,6 +16,8 @@ const state = {
   jobsRefreshPromise: null,
   lastJobsRefreshAt: null,
   backendMarkerText: 'Backend: sprawdzanie...',
+  backendCpuHistory: [],
+  presets: [],
   settings: {
     encoder: 'cpu',
     fpsMode: 'source',
@@ -24,7 +26,7 @@ const state = {
     audioCodec: 'opus',
     audioBitrateKbps: 96,
     testClipEnabled: false,
-    smartQuality: true
+    smartQuality: false
   }
 };
 
@@ -37,7 +39,9 @@ const elements = {
   addFilesBtn: document.querySelector('#addFilesBtn'),
   dropzone: document.querySelector('#dropzone'),
   scanStatus: document.querySelector('#scanStatus'),
+  filesListWrap: document.querySelector('#filesListWrap'),
   filesList: document.querySelector('#filesList'),
+  toggleFilesSectionBtn: document.querySelector('#toggleFilesSectionBtn'),
   clearFilesBtn: document.querySelector('#clearFilesBtn'),
   toggleSelectionBtn: document.querySelector('#toggleSelectionBtn'),
   encoderSwitch: document.querySelector('#encoderSwitch'),
@@ -50,18 +54,23 @@ const elements = {
   testClipEnabled: document.querySelector('#testClipEnabled'),
   smartQualityEnabled: document.querySelector('#smartQualityEnabled'),
   smartQualityHint: document.querySelector('#smartQualityHint'),
+  settingsHeaderTitle: document.querySelector('#settingsHeaderTitle'),
+  presetBtn: document.querySelector('#presetBtn'),
   queueBtn: document.querySelector('#queueBtn'),
+  toggleQueueSectionBtn: document.querySelector('#toggleQueueSectionBtn'),
+  queueBody: document.querySelector('#queueBody'),
+  queueControls: document.querySelector('#queueControls'),
   resumeAllBtn: document.querySelector('#resumeAllBtn'),
   stopAllBtn: document.querySelector('#stopAllBtn'),
   clearQueueBtn: document.querySelector('#clearQueueBtn'),
   refreshBtn: document.querySelector('#refreshBtn'),
   overallProgressLabel: document.querySelector('#overallProgressLabel'),
   overallProgressBar: document.querySelector('#overallProgressBar'),
+  currentJobSummary: document.querySelector('#currentJobSummary'),
   queueStats: document.querySelector('#queueStats'),
   queueLastRefreshed: document.querySelector('#queueLastRefreshed'),
   backendMarker: document.querySelector('#backendMarker'),
-  presetChip: document.querySelector('#presetChip'),
-  themeToggle: document.querySelector('#themeToggle'),
+  cpuMiniChart: document.querySelector('#cpuMiniChart'),
   jobsList: document.querySelector('#jobsList')
 };
 
@@ -72,9 +81,12 @@ const topNavButtons = Array.from(document.querySelectorAll('[data-nav-action]'))
 elements.scanBtn?.addEventListener('click', handleScan);
 elements.browseBtn?.addEventListener('click', handleBrowseFolder);
 elements.addFilesBtn?.addEventListener('click', handleAddFilesDialog);
+elements.toggleFilesSectionBtn?.addEventListener('click', () => toggleCollapsible('files'));
 elements.clearFilesBtn?.addEventListener('click', clearFilesToQueue);
 elements.toggleSelectionBtn?.addEventListener('click', toggleSelection);
+elements.presetBtn?.addEventListener('click', handlePresetButton);
 elements.queueBtn?.addEventListener('click', enqueueSelected);
+elements.toggleQueueSectionBtn?.addEventListener('click', () => toggleCollapsible('queue'));
 elements.resumeAllBtn?.addEventListener('click', resumeAllJobs);
 elements.stopAllBtn?.addEventListener('click', stopAllJobs);
 elements.clearQueueBtn?.addEventListener('click', clearQueue);
@@ -118,9 +130,9 @@ elements.encoderSwitch?.querySelectorAll('button').forEach((button) => {
 
 setupDropzone();
 setupSettingsTabs();
-setupTopNav();
-setupThemeToggle();
 initializeRuntimeMode();
+initializeCollapsibleSections();
+loadPresets();
 
 setInterval(() => {
   void refreshJobs();
@@ -133,7 +145,7 @@ void refreshSmartQualityHint();
 updatePresetChip();
 
 function updatePresetChip() {
-  if (!elements.presetChip) {
+  if (!elements.settingsHeaderTitle) {
     return;
   }
 
@@ -144,7 +156,7 @@ function updatePresetChip() {
     ? Math.round(Number(state.settings.targetPercent))
     : 55;
 
-  elements.presetChip.textContent = `Preset: ${encoderLabel} | ${qualityLabel} | ${fpsLabel} | ${targetPercent}%`;
+  elements.settingsHeaderTitle.innerHTML = `&#9881; Ustawienia <span class="muted compact">${encoderLabel} | ${qualityLabel} | ${fpsLabel} | ${targetPercent}%</span>`;
 }
 
 function initializeRuntimeMode() {
@@ -685,10 +697,17 @@ async function clearQueue() {
 
 function renderJobs() {
   renderQueueLastRefreshed();
-  updateTopNavQueueState();
 
-  if (!state.jobs.length) {
+  const hasJobs = Array.isArray(state.jobs) && state.jobs.length > 0;
+  if (elements.queueControls) {
+    elements.queueControls.hidden = !hasJobs;
+  }
+
+  if (!hasJobs) {
     renderOverallProgress(0);
+    if (elements.currentJobSummary) {
+      elements.currentJobSummary.textContent = 'Brak aktywnie konwertowanego pliku.';
+    }
     elements.queueStats.textContent = 'Brak aktywnych zadań.';
     elements.jobsList.textContent = 'Kolejka jest pusta.';
     elements.jobsList.classList.add('empty-state');
@@ -707,8 +726,10 @@ function renderJobs() {
   };
 
   renderOverallProgress(summary.overallProgressPercent || 0);
+  renderCurrentJobSummary(summary);
+
   elements.queueStats.textContent =
-    `Przygotowywane: ${summary.preparing || 0} · Aktywne: ${summary.processing} · W kolejce: ${summary.queued} · Gotowe: ${summary.completed} · Pominięte HEVC: ${summary.skipped || 0} · Błędy: ${summary.failed} · Anulowane: ${summary.cancelled}`;
+    `Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte HEVC: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
 
   elements.jobsList.classList.remove('empty-state');
   elements.jobsList.innerHTML = `
@@ -800,6 +821,39 @@ function renderJobs() {
       }
     });
   });
+
+  ensureActiveJobVisible();
+}
+
+function renderCurrentJobSummary(summary) {
+  if (!elements.currentJobSummary) {
+    return;
+  }
+
+  const total = state.jobs.length;
+  const active = state.jobs.find((job) => job.status === 'processing') || state.jobs.find((job) => job.status === 'preparing');
+  const completedLike = (summary.completed || 0) + (summary.skipped || 0) + (summary.failed || 0) + (summary.cancelled || 0);
+  const currentIndex = Math.min(total, completedLike + (active ? 1 : 0));
+  const pct = Number(summary.overallProgressPercent || 0);
+
+  if (!active) {
+    elements.currentJobSummary.textContent = `Postęp: ${Math.max(0, currentIndex)}/${total} | ${pct.toFixed(1)}% | Brak aktywnego pliku`;
+    return;
+  }
+
+  const activeName = basename(active.sourceFile || '');
+  elements.currentJobSummary.textContent = `Aktualnie konwertuje: ${activeName} | ${currentIndex}/${total} | ${pct.toFixed(1)}%`;
+}
+
+function ensureActiveJobVisible() {
+  const activeRow = elements.jobsList.querySelector('tr.queue-row.status-processing');
+  if (!activeRow) {
+    return;
+  }
+
+  elements.jobsList.querySelectorAll('tr.queue-row').forEach((row) => row.classList.remove('is-current-job'));
+  activeRow.classList.add('is-current-job');
+  activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function setupTopNav() {
@@ -974,30 +1028,73 @@ async function refreshBackendMarker() {
       throw new Error(payload.error || 'Brak /api/health');
     }
 
-    const startedAt = formatIsoDateTime(payload.startedAt);
-    const host = payload.host || '127.0.0.1';
-    const port = Number(payload.port || 3001);
-    const instanceId = payload.instanceId || 'brak';
-    const pid = Number(payload.pid || 0) || '—';
+    const appHost = String(window.location.host || `${payload.host || '127.0.0.1'}:${Number(payload.port || 3001)}`);
     const cpuTotal = Number.isFinite(Number(payload.cpuUsagePercent))
-      ? `${Number(payload.cpuUsagePercent).toFixed(1)}%`
-      : '—';
-    const cpuProcess = Number.isFinite(Number(payload.processCpuPercent))
-      ? `${Number(payload.processCpuPercent).toFixed(1)}%`
-      : '—';
+      ? Number(payload.cpuUsagePercent)
+      : 0;
     const rss = Number.isFinite(Number(payload.processRssMB))
       ? `${Number(payload.processRssMB).toFixed(0)} MB`
-      : '—';
+      : '-';
 
-    state.backendMarkerText =
-      `Backend: ${host}:${port} | instancja: ${instanceId} | PID: ${pid} | start: ${startedAt} | ` +
-      `CPU: ${cpuTotal} | App CPU: ${cpuProcess} | RAM: ${rss}`;
+    state.backendCpuHistory.push(cpuTotal);
+    if (state.backendCpuHistory.length > 32) {
+      state.backendCpuHistory.shift();
+    }
+
+    state.backendMarkerText = `Backend: ${appHost} | CPU: ${cpuTotal.toFixed(1)}% | RAM: ${rss}`;
+    drawCpuMiniChart();
   } catch (_error) {
     state.backendMarkerText = 'Backend: niedostępny';
   }
   if (elements.backendMarker) {
     elements.backendMarker.textContent = state.backendMarkerText;
   }
+}
+
+function drawCpuMiniChart() {
+  if (!elements.cpuMiniChart) {
+    return;
+  }
+
+  const canvas = elements.cpuMiniChart;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return;
+  }
+
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.strokeStyle = '#d2dbe8';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h - 1);
+  ctx.lineTo(w, h - 1);
+  ctx.stroke();
+
+  const values = state.backendCpuHistory;
+  if (!values.length) {
+    return;
+  }
+
+  const stepX = values.length > 1 ? (w - 2) / (values.length - 1) : 0;
+  ctx.strokeStyle = '#2f6fbe';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  values.forEach((v, index) => {
+    const x = 1 + index * stepX;
+    const y = h - 2 - ((Math.max(0, Math.min(100, Number(v))) / 100) * (h - 4));
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
 }
 
 function formatIsoDateTime(value) {
@@ -1128,6 +1225,171 @@ function parseFileUriToWindowsPath(value) {
   } catch (_error) {
     return '';
   }
+}
+
+function initializeCollapsibleSections() {
+  if (elements.filesListWrap) {
+    elements.filesListWrap.classList.add('is-collapsed');
+  }
+  if (elements.queueBody) {
+    elements.queueBody.classList.add('is-collapsed');
+  }
+  refreshCollapsibleButtonLabels();
+}
+
+function toggleCollapsible(target) {
+  if (target === 'files' && elements.filesListWrap) {
+    elements.filesListWrap.classList.toggle('is-collapsed');
+  }
+  if (target === 'queue' && elements.queueBody) {
+    elements.queueBody.classList.toggle('is-collapsed');
+  }
+  refreshCollapsibleButtonLabels();
+}
+
+function refreshCollapsibleButtonLabels() {
+  if (elements.toggleFilesSectionBtn && elements.filesListWrap) {
+    const collapsed = elements.filesListWrap.classList.contains('is-collapsed');
+    elements.toggleFilesSectionBtn.textContent = collapsed ? 'Rozwiń' : 'Ukryj';
+  }
+  if (elements.toggleQueueSectionBtn && elements.queueBody) {
+    const collapsed = elements.queueBody.classList.contains('is-collapsed');
+    elements.toggleQueueSectionBtn.textContent = collapsed ? 'Rozwiń' : 'Ukryj';
+  }
+}
+
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem('x265-presets');
+    state.presets = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(state.presets)) {
+      state.presets = [];
+    }
+  } catch (_error) {
+    state.presets = [];
+  }
+}
+
+function savePresets() {
+  try {
+    localStorage.setItem('x265-presets', JSON.stringify(state.presets));
+  } catch (_error) {
+    // Ignore storage errors.
+  }
+}
+
+function settingsSnapshot() {
+  return {
+    encoder: state.settings.encoder,
+    fpsMode: state.settings.fpsMode,
+    targetPercent: state.settings.targetPercent,
+    qualityPreset: state.settings.qualityPreset,
+    audioCodec: state.settings.audioCodec,
+    audioBitrateKbps: state.settings.audioBitrateKbps,
+    testClipEnabled: state.settings.testClipEnabled,
+    smartQuality: state.settings.smartQuality
+  };
+}
+
+function applySettingsToUi() {
+  if (elements.encoderSwitch) {
+    elements.encoderSwitch.querySelectorAll('button').forEach((item) => {
+      item.classList.toggle('is-active', item.dataset.value === state.settings.encoder);
+    });
+  }
+  if (elements.fpsMode) elements.fpsMode.value = state.settings.fpsMode === '24' ? '24' : 'source';
+  if (elements.targetPercent) elements.targetPercent.value = String(state.settings.targetPercent);
+  if (elements.targetPercentValue) elements.targetPercentValue.textContent = `${state.settings.targetPercent}%`;
+  if (elements.qualityPreset) elements.qualityPreset.value = state.settings.qualityPreset;
+  if (elements.audioCodec) elements.audioCodec.value = state.settings.audioCodec;
+  if (elements.audioBitrate) elements.audioBitrate.value = String(state.settings.audioBitrateKbps);
+  if (elements.testClipEnabled) elements.testClipEnabled.checked = Boolean(state.settings.testClipEnabled);
+  if (elements.smartQualityEnabled) elements.smartQualityEnabled.checked = Boolean(state.settings.smartQuality);
+  updatePresetChip();
+  void refreshSmartQualityHint();
+}
+
+function handlePresetButton() {
+  const presetList = state.presets.length
+    ? state.presets.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n')
+    : 'brak presetów';
+
+  const action = window.prompt(
+    `Presety:\n${presetList}\n\nWpisz akcje: save, update, load, delete`,
+    'save'
+  );
+
+  if (!action) {
+    return;
+  }
+
+  const normalized = String(action).trim().toLowerCase();
+
+  if (normalized === 'save') {
+    const name = window.prompt('Nazwa nowego presetu:', `mój-preset-${state.presets.length + 1}`);
+    if (!name) return;
+    state.presets.push({ name: String(name).trim(), settings: settingsSnapshot() });
+    savePresets();
+    setScanStatus(`Zapisano preset: ${name}`, false);
+    return;
+  }
+
+  if (normalized === 'update') {
+    if (!state.presets.length) {
+      setScanStatus('Brak presetów do aktualizacji.', true);
+      return;
+    }
+    const idxRaw = window.prompt('Który preset zaktualizować? Podaj numer:', '1');
+    const idx = Number(idxRaw) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+      setScanStatus('Niepoprawny numer presetu.', true);
+      return;
+    }
+    state.presets[idx].settings = settingsSnapshot();
+    savePresets();
+    setScanStatus(`Zaktualizowano preset: ${state.presets[idx].name}`, false);
+    return;
+  }
+
+  if (normalized === 'load') {
+    if (!state.presets.length) {
+      setScanStatus('Brak presetów do wczytania.', true);
+      return;
+    }
+    const idxRaw = window.prompt('Który preset wczytać? Podaj numer:', '1');
+    const idx = Number(idxRaw) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+      setScanStatus('Niepoprawny numer presetu.', true);
+      return;
+    }
+    const loaded = state.presets[idx].settings || {};
+    state.settings = {
+      ...state.settings,
+      ...loaded
+    };
+    applySettingsToUi();
+    setScanStatus(`Wczytano preset: ${state.presets[idx].name}`, false);
+    return;
+  }
+
+  if (normalized === 'delete') {
+    if (!state.presets.length) {
+      setScanStatus('Brak presetów do usunięcia.', true);
+      return;
+    }
+    const idxRaw = window.prompt('Który preset usunąć? Podaj numer:', '1');
+    const idx = Number(idxRaw) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+      setScanStatus('Niepoprawny numer presetu.', true);
+      return;
+    }
+    const removed = state.presets.splice(idx, 1);
+    savePresets();
+    setScanStatus(`Usunięto preset: ${removed[0]?.name || 'preset'}`, false);
+    return;
+  }
+
+  setScanStatus('Nieznana akcja presetów. Użyj: save, update, load, delete.', true);
 }
 
 function setupSettingsTabs() {
