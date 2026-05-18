@@ -1,17 +1,32 @@
 $ErrorActionPreference = 'Stop'
 
+param(
+    [ValidateSet('local', 'unraid')]
+    [string]$Mode = 'local',
+    [string]$UnraidUrl = 'http://192.168.10.186:3001'
+)
+
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$launcherPath = Join-Path $projectRoot 'run.bat'
+$cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+
+if ($Mode -eq 'local') {
+    $launcherPath = Join-Path $projectRoot 'run.bat'
+    $shortcutName = 'x265 Converter.lnk'
+    $shortcutDescription = 'Uruchom lokalny x265 Converter'
+    $cmdArgs = "/c `"`"$launcherPath`"`""
+} else {
+    $launcherPath = Join-Path $projectRoot 'run_unraid_web.cmd'
+    $shortcutName = 'x265 Converter (Unraid).lnk'
+    $shortcutDescription = 'Uruchom web klient x265 Converter (Unraid)'
+    $cmdArgs = "/c `"`"$launcherPath`"`" `"$UnraidUrl`""
+}
 
 if (-not (Test-Path -LiteralPath $launcherPath)) {
     throw "Brak pliku uruchamiajacego: $launcherPath"
 }
 
-$cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
-$cmdArgs = "/c `"`"$launcherPath`"`""
-
 $desktopPath = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktopPath 'x265 Converter.lnk'
+$shortcutPath = Join-Path $desktopPath $shortcutName
 
 # Use a Windows media icon by default, then fallback to generic system icon.
 $wmploc = Join-Path $env:SystemRoot 'System32\wmploc.dll'
@@ -29,10 +44,14 @@ $shortcut.TargetPath = $cmdExe
 $shortcut.Arguments = $cmdArgs
 $shortcut.WorkingDirectory = $projectRoot
 $shortcut.WindowStyle = 1
-$shortcut.Description = 'Uruchom lokalny x265 Converter'
+$shortcut.Description = $shortcutDescription
 $shortcut.IconLocation = $iconLocation
 $shortcut.Save()
 
 Write-Host "Utworzono skrot: $shortcutPath"
 Write-Host "Uruchamia: $cmdExe $cmdArgs"
+Write-Host "Tryb: $Mode"
+if ($Mode -eq 'unraid') {
+    Write-Host "URL: $UnraidUrl"
+}
 Write-Host "Ikona: $iconLocation"

@@ -4,6 +4,10 @@ const IS_DESKTOP_RUNTIME = Boolean(
   (window.electronAPI && window.electronAPI.isElectron) ||
   String(navigator.userAgent || '').includes('Electron')
 );
+const IS_REMOTE_BACKEND = (() => {
+  const host = String(window.location.hostname || '').toLowerCase();
+  return Boolean(host && host !== '127.0.0.1' && host !== 'localhost');
+})();
 
 const state = {
   scannedFiles: [],
@@ -116,6 +120,7 @@ setupDropzone();
 setupSettingsTabs();
 setupTopNav();
 setupThemeToggle();
+initializeRuntimeMode();
 
 setInterval(() => {
   void refreshJobs();
@@ -142,7 +147,34 @@ function updatePresetChip() {
   elements.presetChip.textContent = `Preset: ${encoderLabel} | ${qualityLabel} | ${fpsLabel} | ${targetPercent}%`;
 }
 
+function initializeRuntimeMode() {
+  if (!IS_REMOTE_BACKEND) {
+    return;
+  }
+
+  if (elements.sourcePath && !String(elements.sourcePath.value || '').trim()) {
+    elements.sourcePath.value = '/data';
+  }
+
+  if (elements.browseBtn) {
+    elements.browseBtn.disabled = true;
+    elements.browseBtn.title = 'Tryb zdalny: uzyj sciezki /data i kliknij Skanuj.';
+  }
+
+  if (elements.addFilesBtn) {
+    elements.addFilesBtn.disabled = true;
+    elements.addFilesBtn.title = 'Tryb zdalny: dodawanie lokalnych plikow jest niedostepne.';
+  }
+
+  setScanStatus('Tryb zdalny: skanuj pliki z /data na serwerze Unraid.', false);
+}
+
 async function handleBrowseFolder() {
+  if (IS_REMOTE_BACKEND) {
+    setScanStatus('Tryb zdalny: wpisz sciezke na Unraid, np. /data, i kliknij Skanuj.', true);
+    return;
+  }
+
   if (!window.electronAPI || typeof window.electronAPI.openFolderDialog !== 'function') {
     setScanStatus('Wybór folderu działa tylko w aplikacji desktop (Electron).', true);
     return;
@@ -160,6 +192,11 @@ async function handleBrowseFolder() {
 }
 
 async function handleAddFilesDialog() {
+  if (IS_REMOTE_BACKEND) {
+    setScanStatus('Tryb zdalny: dodawanie plikow z lokalnego dysku jest wylaczone.', true);
+    return;
+  }
+
   if (!window.electronAPI || typeof window.electronAPI.openFilesDialog !== 'function') {
     setScanStatus('Dodawanie plików przez dialog działa tylko w aplikacji desktop (Electron).', true);
     return;
@@ -193,6 +230,14 @@ async function handleAddFilesDialog() {
 
 function setupDropzone() {
   if (!elements.dropzone) return;
+
+  if (IS_REMOTE_BACKEND) {
+    const label = elements.dropzone.querySelector('p');
+    if (label) {
+      label.textContent = 'Tryb zdalny: uzyj sciezki /data i przycisku Skanuj';
+    }
+    return;
+  }
 
   ['dragenter', 'dragover'].forEach((eventName) => {
     elements.dropzone.addEventListener(eventName, (event) => {
