@@ -28,28 +28,28 @@ body {
 }
 
 html[data-theme="dark"] {
-  --bg-start: #15171d;
-  --bg-end: #101217;
-  --bg: #171a21;
-  --panel: #1e222b;
-  --panel-strong: #242935;
-  --line: #3a414f;
-  --line-soft: #2f3643;
-  --ink: #e8edf7;
-  --muted: #9ea8ba;
-  --btn: #2a303c;
-  --btn-hover: #343b49;
-  --accent: #6aa2ff;
-  --accent-soft: #273854;
-  --good: #64c17d;
-  --bad: #e07a7a;
+  --bg-start: #08090c;
+  --bg-end: #030406;
+  --bg: #0b0d11;
+  --panel: #10141a;
+  --panel-strong: #161b22;
+  --line: #2b333f;
+  --line-soft: #1d232c;
+  --ink: #edf2fb;
+  --muted: #9aa6bb;
+  --btn: #171c24;
+  --btn-hover: #222936;
+  --accent: #7fb0ff;
+  --accent-soft: #1a2740;
+  --good: #72cf8c;
+  --bad: #eb8686;
 }
 
 html[data-theme="dark"] .menu-strip,
 html[data-theme="dark"] .toolbar-strip {
-  border-color: #39404d;
-  background: linear-gradient(180deg, #252a34 0%, #1f2430 100%);
-  box-shadow: inset 0 1px 0 #303749;
+  border-color: #242b36;
+  background: linear-gradient(180deg, #141820 0%, #0e1218 100%);
+  box-shadow: inset 0 1px 0 #1d2430;
 }
 
 html[data-theme="dark"] .menu-btn {
@@ -68,44 +68,44 @@ html[data-theme="dark"] .menu-btn.is-attention {
 }
 
 html[data-theme="dark"] .panel {
-  border-color: #3a4150;
-  box-shadow: inset 0 1px 0 #2b3140;
+  border-color: #26303b;
+  box-shadow: inset 0 1px 0 #18202a;
 }
 
 html[data-theme="dark"] .topbar {
-  background: linear-gradient(180deg, #2a3040 0%, #232938 100%);
+  background: linear-gradient(180deg, #171c26 0%, #11161f 100%);
 }
 
 html[data-theme="dark"] .toolbar-chip,
 html[data-theme="dark"] .chip {
-  border-color: #485165;
+  border-color: #324052;
   color: var(--ink);
-  background: linear-gradient(180deg, #2d3444 0%, #252c3a 100%);
+  background: linear-gradient(180deg, #18202b 0%, #121821 100%);
 }
 
 html[data-theme="dark"] input[type="text"],
 html[data-theme="dark"] select {
-  border-color: #4b5365;
-  background: #1a1f2a;
+  border-color: #344152;
+  background: #0f141b;
 }
 
 html[data-theme="dark"] button {
-  border-color: #4b5467;
-  background: linear-gradient(180deg, #343b4a 0%, #2a303c 100%);
+  border-color: #354152;
+  background: linear-gradient(180deg, #1b2330 0%, #141b25 100%);
 }
 
 html[data-theme="dark"] button:hover {
-  background: linear-gradient(180deg, #3f4757 0%, #343b49 100%);
+  background: linear-gradient(180deg, #253042 0%, #1b2432 100%);
 }
 
 html[data-theme="dark"] .dropzone {
-  border-color: #485163;
-  background: #202633;
+  border-color: #334053;
+  background: #121924;
 }
 
 html[data-theme="dark"] .dropzone.is-over {
-  border-color: #7aadff;
-  background: #25344f;
+  border-color: #8fbaff;
+  background: #162235;
 }
 
 html[data-theme="dark"] .settings-tabs {
@@ -124,19 +124,19 @@ html[data-theme="dark"] .settings-tab.is-active {
 }
 
 html[data-theme="dark"] .settings-panel-body {
-  border-color: #424a5a;
-  background: linear-gradient(180deg, #252c39 0%, #202734 100%);
+  border-color: #2c3643;
+  background: linear-gradient(180deg, #131922 0%, #0e131a 100%);
 }
 
 html[data-theme="dark"] .empty-state,
 html[data-theme="dark"] .file-row,
 html[data-theme="dark"] .queue-table-wrap {
-  background: #1c212c;
+  background: #0f141b;
 }
 
 html[data-theme="dark"] .progress-shell,
 html[data-theme="dark"] .inline-progress {
-  background: #191f2a;
+  background: #0b1016;
 }
 
 html[data-theme="dark"] .queue-table th {

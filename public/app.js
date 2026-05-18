@@ -137,6 +137,7 @@ elements.encoderSwitch?.querySelectorAll('button').forEach((button) => {
 setupDropzone();
 setupSettingsTabs();
 initializeRuntimeMode();
+applyTheme('dark');
 initializeCollapsibleSections();
 loadPresets();
 
@@ -1234,9 +1235,6 @@ function parseFileUriToWindowsPath(value) {
 }
 
 function initializeCollapsibleSections() {
-  if (elements.filesListWrap) {
-    elements.filesListWrap.classList.add('is-collapsed');
-  }
   if (elements.queueBody) {
     elements.queueBody.classList.add('is-collapsed');
   }

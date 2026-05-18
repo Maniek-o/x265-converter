@@ -1538,9 +1538,9 @@ function buildFfmpegArgs(job) {
   const duration = Math.max(1, metrics.sourceDurationSeconds || metrics.durationSeconds || 1);
   const cores = Math.max(1, (os.cpus() || []).length || 1);
   const turboEnabled = Boolean(settings.turboMode);
-  // Turbo: split cores evenly across N parallel jobs (auto-sized for CPU tier)
-  // Normal: use cpuLimitPercent of all cores, but clamp to leave 1-2 threads for system
-  const turboConcurrency = computeTurboConcurrency(cores);
+  // Turbo uses full CPU for one job and only splits cores when there are actually
+  // multiple active/queued turbo jobs competing for the machine.
+  const turboConcurrency = turboEnabled ? computeTurboWorkload(job, cores) : 1;
   const threadLimit = turboEnabled
     ? Math.max(1, Math.floor(cores / turboConcurrency))
     : computeThreadLimitFromPercent(settings.cpuLimitPercent);
@@ -1984,6 +1984,23 @@ function computeThreadLimitFromPercent(cpuLimitPercent) {
 function computeTurboConcurrency(cores) {
   if (cores >= 24) return 3;
   return 2;
+}
+
+function computeTurboWorkload(job, cores) {
+  const maxTurboConcurrency = computeTurboConcurrency(cores);
+  const turboJobsInFlight = queueState.jobs.filter((item) => {
+    if (item.id === job.id) {
+      return true;
+    }
+
+    if (!item.settings?.turboMode) {
+      return false;
+    }
+
+    return item.status === 'queued' || item.status === 'processing' || item.status === 'preparing';
+  }).length;
+
+  return Math.max(1, Math.min(maxTurboConcurrency, turboJobsInFlight || 1));
 }
 
 function readCpuTimesSnapshot() {
