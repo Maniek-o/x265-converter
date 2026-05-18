@@ -1,10 +1,10 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [ValidateSet('local', 'unraid')]
     [string]$Mode = 'local',
     [string]$UnraidUrl = 'http://192.168.10.186:3001'
 )
+
+$ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
