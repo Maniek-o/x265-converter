@@ -130,7 +130,7 @@ $shell32 = Join-Path $env:SystemRoot 'System32\shell32.dll'
 $iconLocation = "$shell32,238"
 
 if ($Mode -eq 'unraid') {
-    $customIconPath = Join-Path $projectRoot 'icons\x265-video-clapper.ico'
+    $customIconPath = Join-Path $projectRoot 'icons\x265-video-clapper-v2.ico'
     try {
         New-VideoClapperIcon -OutputPath $customIconPath
         $iconLocation = "$customIconPath,0"
