@@ -14,7 +14,6 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ffmpeg \
-       ffprobe \
        ca-certificates \
        curl \
        tini \
