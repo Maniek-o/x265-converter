@@ -158,6 +158,38 @@
           <div id="jobsList" class="jobs-list empty-state">Kolejka jest pusta.</div>
         </div>
       </section>
+
+      <div id="presetDialog" class="preset-dialog-backdrop" hidden>
+        <div class="preset-dialog" role="dialog" aria-modal="true" aria-labelledby="presetDialogTitle">
+          <div class="preset-dialog-head">
+            <h3 id="presetDialogTitle">Presety</h3>
+            <button id="presetDialogCloseBtn" class="ghost" type="button" aria-label="Zamknij okno presetów">Zamknij</button>
+          </div>
+
+          <p class="muted compact">Zapisz bieżące ustawienia jako nowy preset albo zaktualizuj wybrany.</p>
+
+          <div class="preset-dialog-grid">
+            <div class="preset-list-box">
+              <label class="field-label-inline" for="presetListSelect">Zapisane presety</label>
+              <select id="presetListSelect" size="7"></select>
+            </div>
+
+            <div class="preset-form-box">
+              <label class="field-label-inline" for="presetNameInput">Nazwa presetu</label>
+              <input id="presetNameInput" type="text" placeholder="np. i9 turbo 55%">
+
+              <div class="preset-action-grid">
+                <button id="presetSaveBtn" class="primary" type="button">Zapisz jako nowy</button>
+                <button id="presetUpdateBtn" class="ghost" type="button">Aktualizuj wybrany</button>
+                <button id="presetLoadBtn" class="ghost" type="button">Wczytaj wybrany</button>
+                <button id="presetDeleteBtn" class="ghost" type="button">Usuń wybrany</button>
+              </div>
+
+              <p id="presetDialogStatus" class="muted compact">Brak zapisanych presetów.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
 
     <script src="/app.js"></script>

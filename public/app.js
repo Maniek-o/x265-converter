@@ -58,6 +58,15 @@ const elements = {
   smartQualityHint: document.querySelector('#smartQualityHint'),
   settingsHeaderTitle: document.querySelector('#settingsHeaderTitle'),
   presetBtn: document.querySelector('#presetBtn'),
+  presetDialog: document.querySelector('#presetDialog'),
+  presetDialogCloseBtn: document.querySelector('#presetDialogCloseBtn'),
+  presetListSelect: document.querySelector('#presetListSelect'),
+  presetNameInput: document.querySelector('#presetNameInput'),
+  presetSaveBtn: document.querySelector('#presetSaveBtn'),
+  presetUpdateBtn: document.querySelector('#presetUpdateBtn'),
+  presetLoadBtn: document.querySelector('#presetLoadBtn'),
+  presetDeleteBtn: document.querySelector('#presetDeleteBtn'),
+  presetDialogStatus: document.querySelector('#presetDialogStatus'),
   queueBtn: document.querySelector('#queueBtn'),
   toggleQueueSectionBtn: document.querySelector('#toggleQueueSectionBtn'),
   queueBody: document.querySelector('#queueBody'),
@@ -87,6 +96,17 @@ elements.toggleFilesSectionBtn?.addEventListener('click', () => toggleCollapsibl
 elements.clearFilesBtn?.addEventListener('click', clearFilesToQueue);
 elements.toggleSelectionBtn?.addEventListener('click', toggleSelection);
 elements.presetBtn?.addEventListener('click', handlePresetButton);
+elements.presetDialogCloseBtn?.addEventListener('click', closePresetDialog);
+elements.presetDialog?.addEventListener('click', (event) => {
+  if (event.target === elements.presetDialog) {
+    closePresetDialog();
+  }
+});
+elements.presetListSelect?.addEventListener('change', syncPresetDialogSelection);
+elements.presetSaveBtn?.addEventListener('click', savePresetFromDialog);
+elements.presetUpdateBtn?.addEventListener('click', updatePresetFromDialog);
+elements.presetLoadBtn?.addEventListener('click', loadPresetFromDialog);
+elements.presetDeleteBtn?.addEventListener('click', deletePresetFromDialog);
 elements.queueBtn?.addEventListener('click', enqueueSelected);
 elements.toggleQueueSectionBtn?.addEventListener('click', () => toggleCollapsible('queue'));
 elements.resumeAllBtn?.addEventListener('click', resumeAllJobs);
@@ -1316,86 +1336,133 @@ function applySettingsToUi() {
 }
 
 function handlePresetButton() {
-  const presetList = state.presets.length
-    ? state.presets.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n')
-    : 'brak presetów';
-
-  const action = window.prompt(
-    `Presety:\n${presetList}\n\nWpisz akcje: save, update, load, delete`,
-    'save'
-  );
-
-  if (!action) {
+  if (!elements.presetDialog) {
     return;
   }
 
-  const normalized = String(action).trim().toLowerCase();
+  renderPresetDialog();
+  elements.presetDialog.hidden = false;
+  elements.presetNameInput?.focus();
+}
 
-  if (normalized === 'save') {
-    const name = window.prompt('Nazwa nowego presetu:', `mój-preset-${state.presets.length + 1}`);
-    if (!name) return;
-    state.presets.push({ name: String(name).trim(), settings: settingsSnapshot() });
-    savePresets();
-    setScanStatus(`Zapisano preset: ${name}`, false);
+function closePresetDialog() {
+  if (elements.presetDialog) {
+    elements.presetDialog.hidden = true;
+  }
+}
+
+function renderPresetDialog(selectedIndex = 0) {
+  if (!elements.presetListSelect || !elements.presetDialogStatus) {
     return;
   }
 
-  if (normalized === 'update') {
-    if (!state.presets.length) {
-      setScanStatus('Brak presetów do aktualizacji.', true);
-      return;
+  elements.presetListSelect.innerHTML = '';
+
+  if (!state.presets.length) {
+    elements.presetDialogStatus.textContent = 'Brak zapisanych presetów. Możesz zapisać bieżące ustawienia jako nowy preset.';
+    if (elements.presetNameInput) {
+      elements.presetNameInput.value = '';
     }
-    const idxRaw = window.prompt('Który preset zaktualizować? Podaj numer:', '1');
-    const idx = Number(idxRaw) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
-      setScanStatus('Niepoprawny numer presetu.', true);
-      return;
-    }
-    state.presets[idx].settings = settingsSnapshot();
-    savePresets();
-    setScanStatus(`Zaktualizowano preset: ${state.presets[idx].name}`, false);
     return;
   }
 
-  if (normalized === 'load') {
-    if (!state.presets.length) {
-      setScanStatus('Brak presetów do wczytania.', true);
-      return;
-    }
-    const idxRaw = window.prompt('Który preset wczytać? Podaj numer:', '1');
-    const idx = Number(idxRaw) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
-      setScanStatus('Niepoprawny numer presetu.', true);
-      return;
-    }
-    const loaded = state.presets[idx].settings || {};
-    state.settings = {
-      ...state.settings,
-      ...loaded
-    };
-    applySettingsToUi();
-    setScanStatus(`Wczytano preset: ${state.presets[idx].name}`, false);
+  state.presets.forEach((preset, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = preset.name;
+    elements.presetListSelect.append(option);
+  });
+
+  const normalizedIndex = Math.max(0, Math.min(state.presets.length - 1, selectedIndex));
+  elements.presetListSelect.value = String(normalizedIndex);
+  syncPresetDialogSelection();
+}
+
+function syncPresetDialogSelection() {
+  if (!elements.presetListSelect || !elements.presetDialogStatus || !elements.presetNameInput) {
     return;
   }
 
-  if (normalized === 'delete') {
-    if (!state.presets.length) {
-      setScanStatus('Brak presetów do usunięcia.', true);
-      return;
-    }
-    const idxRaw = window.prompt('Który preset usunąć? Podaj numer:', '1');
-    const idx = Number(idxRaw) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
-      setScanStatus('Niepoprawny numer presetu.', true);
-      return;
-    }
-    const removed = state.presets.splice(idx, 1);
-    savePresets();
-    setScanStatus(`Usunięto preset: ${removed[0]?.name || 'preset'}`, false);
+  const idx = Number(elements.presetListSelect.value);
+  const selectedPreset = state.presets[idx];
+  if (!selectedPreset) {
+    elements.presetDialogStatus.textContent = 'Brak wybranego presetu.';
     return;
   }
 
-  setScanStatus('Nieznana akcja presetów. Użyj: save, update, load, delete.', true);
+  elements.presetNameInput.value = selectedPreset.name;
+  elements.presetDialogStatus.textContent = `Wybrany preset: ${selectedPreset.name}`;
+}
+
+function savePresetFromDialog() {
+  const name = String(elements.presetNameInput?.value || '').trim();
+  if (!name) {
+    setPresetDialogStatus('Podaj nazwę nowego presetu.', true);
+    return;
+  }
+
+  state.presets.push({ name, settings: settingsSnapshot() });
+  savePresets();
+  renderPresetDialog(state.presets.length - 1);
+  setPresetDialogStatus(`Zapisano nowy preset: ${name}`, false);
+  setScanStatus(`Zapisano preset: ${name}`, false);
+}
+
+function updatePresetFromDialog() {
+  const idx = Number(elements.presetListSelect?.value);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+    setPresetDialogStatus('Wybierz preset do aktualizacji.', true);
+    return;
+  }
+
+  const name = String(elements.presetNameInput?.value || state.presets[idx].name).trim();
+  state.presets[idx] = {
+    name: name || state.presets[idx].name,
+    settings: settingsSnapshot()
+  };
+  savePresets();
+  renderPresetDialog(idx);
+  setPresetDialogStatus(`Zaktualizowano preset: ${state.presets[idx].name}`, false);
+  setScanStatus(`Zaktualizowano preset: ${state.presets[idx].name}`, false);
+}
+
+function loadPresetFromDialog() {
+  const idx = Number(elements.presetListSelect?.value);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+    setPresetDialogStatus('Wybierz preset do wczytania.', true);
+    return;
+  }
+
+  state.settings = {
+    ...state.settings,
+    ...(state.presets[idx].settings || {})
+  };
+  applySettingsToUi();
+  setPresetDialogStatus(`Wczytano preset: ${state.presets[idx].name}`, false);
+  setScanStatus(`Wczytano preset: ${state.presets[idx].name}`, false);
+}
+
+function deletePresetFromDialog() {
+  const idx = Number(elements.presetListSelect?.value);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.presets.length) {
+    setPresetDialogStatus('Wybierz preset do usunięcia.', true);
+    return;
+  }
+
+  const removed = state.presets.splice(idx, 1);
+  savePresets();
+  renderPresetDialog(Math.max(0, idx - 1));
+  setPresetDialogStatus(`Usunięto preset: ${removed[0]?.name || 'preset'}`, false);
+  setScanStatus(`Usunięto preset: ${removed[0]?.name || 'preset'}`, false);
+}
+
+function setPresetDialogStatus(message, isError) {
+  if (!elements.presetDialogStatus) {
+    return;
+  }
+
+  elements.presetDialogStatus.textContent = message;
+  elements.presetDialogStatus.classList.toggle('error-text', Boolean(isError));
 }
 
 function setupSettingsTabs() {
