@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function New-UnraidBrandIcon {
+function New-VideoClapperIcon {
     param(
         [Parameter(Mandatory = $true)]
         [string]$OutputPath
@@ -20,47 +20,46 @@ function New-UnraidBrandIcon {
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    # Unraid-like gradient background
+    # Background (dark neutral)
     $bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         (New-Object System.Drawing.Rectangle(0, 0, $size, $size)),
-        [System.Drawing.Color]::FromArgb(255, 234, 36, 40),
-        [System.Drawing.Color]::FromArgb(255, 255, 152, 43),
-        20
+        [System.Drawing.Color]::FromArgb(255, 37, 41, 48),
+        [System.Drawing.Color]::FromArgb(255, 18, 21, 27),
+        120
     )
     $g.FillRectangle($bgBrush, 0, 0, $size, $size)
 
-    # UNRAID wordmark
-    $textBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
-    $font = New-Object System.Drawing.Font('Segoe UI', 32, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $sf = New-Object System.Drawing.StringFormat
-    $sf.Alignment = [System.Drawing.StringAlignment]::Center
-    $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
-    $textRect = New-Object System.Drawing.RectangleF(0, 118, $size, 102)
-    $g.DrawString('UNRAID', $font, $textBrush, $textRect, $sf)
+    # Clapper body
+    $bodyBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 62, 66, 74))
+    $bodyRect = New-Object System.Drawing.Rectangle(44, 108, 168, 104)
+    $g.FillRectangle($bodyBrush, $bodyRect)
 
-    # Small film clapper accent (bottom-right)
-    $plateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(220, 34, 39, 46))
-    $plateRect = New-Object System.Drawing.Rectangle(154, 164, 78, 52)
-    $g.FillRectangle($plateBrush, $plateRect)
-
-    $slateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(240, 20, 24, 28))
+    # Top slate
+    $slateBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 30, 33, 39))
     $slatePts = @(
-        (New-Object System.Drawing.Point(150, 155)),
-        (New-Object System.Drawing.Point(228, 141)),
-        (New-Object System.Drawing.Point(236, 163)),
-        (New-Object System.Drawing.Point(158, 177))
+        (New-Object System.Drawing.Point(34, 96)),
+        (New-Object System.Drawing.Point(206, 64)),
+        (New-Object System.Drawing.Point(224, 102)),
+        (New-Object System.Drawing.Point(52, 134))
     )
     $g.FillPolygon($slateBrush, $slatePts)
 
-    $stripePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(220, 255, 255, 255), 3)
-    $g.DrawLine($stripePen, 160, 172, 173, 149)
-    $g.DrawLine($stripePen, 176, 169, 189, 146)
-    $g.DrawLine($stripePen, 192, 166, 205, 143)
-    $g.DrawLine($stripePen, 208, 163, 221, 140)
+    # White stripes on top slate
+    $stripePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(240, 255, 255, 255), 8)
+    $g.DrawLine($stripePen, 52, 123, 73, 80)
+    $g.DrawLine($stripePen, 87, 116, 108, 74)
+    $g.DrawLine($stripePen, 122, 110, 143, 68)
+    $g.DrawLine($stripePen, 157, 103, 178, 61)
 
-    $detailPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(150, 255, 255, 255), 2)
-    $g.DrawLine($detailPen, 162, 188, 224, 188)
-    $g.DrawLine($detailPen, 162, 202, 214, 202)
+    # Body details
+    $linePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(130, 255, 255, 255), 3)
+    $g.DrawLine($linePen, 60, 146, 196, 146)
+    $g.DrawLine($linePen, 60, 170, 196, 170)
+    $g.DrawLine($linePen, 60, 194, 174, 194)
+
+    # Border for clarity
+    $borderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 255, 255, 255), 2)
+    $g.DrawRectangle($borderPen, 1, 1, $size - 3, $size - 3)
 
     if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
@@ -76,13 +75,11 @@ function New-UnraidBrandIcon {
         $g.Dispose()
         $bmp.Dispose()
         $bgBrush.Dispose()
-        $font.Dispose()
-        $textBrush.Dispose()
-        $sf.Dispose()
-        $plateBrush.Dispose()
+        $bodyBrush.Dispose()
         $slateBrush.Dispose()
         $stripePen.Dispose()
-        $detailPen.Dispose()
+        $linePen.Dispose()
+        $borderPen.Dispose()
     }
 }
 
@@ -114,9 +111,9 @@ $shell32 = Join-Path $env:SystemRoot 'System32\shell32.dll'
 $iconLocation = "$shell32,238"
 
 if ($Mode -eq 'unraid') {
-    $customIconPath = Join-Path $projectRoot 'icons\x265-unraid-brand.ico'
+    $customIconPath = Join-Path $projectRoot 'icons\x265-video-clapper.ico'
     try {
-        New-UnraidBrandIcon -OutputPath $customIconPath
+        New-VideoClapperIcon -OutputPath $customIconPath
         $iconLocation = "$customIconPath,0"
     } catch {
         # Fallback to a more network/server-like icon for Unraid mode.
