@@ -104,17 +104,20 @@ function New-VideoClapperIcon {
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+$psExe = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) { (Get-Command pwsh.exe).Source } else { (Get-Command powershell.exe).Source }
 
 if ($Mode -eq 'local') {
     $launcherPath = Join-Path $projectRoot 'run.bat'
     $shortcutName = 'x265 Converter.lnk'
     $shortcutDescription = 'Uruchom lokalny x265 Converter'
+    $targetExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
     $cmdArgs = "/c `"`"$launcherPath`"`""
 } else {
-    $launcherPath = Join-Path $projectRoot 'run_unraid_web.cmd'
+    $launcherPath = Join-Path $projectRoot 'run.ps1'
     $shortcutName = 'x265 Converter (Unraid).lnk'
-    $shortcutDescription = 'Uruchom web klient x265 Converter (Unraid)'
-    $cmdArgs = "/c `"`"$launcherPath`"`" `"$UnraidUrl`""
+    $shortcutDescription = 'x265 Converter - polaczenie z serwerem Unraid'
+    $targetExe = $psExe
+    $cmdArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`" -RemoteUrl `"$UnraidUrl`""
 }
 
 if (-not (Test-Path -LiteralPath $launcherPath)) {
@@ -144,7 +147,7 @@ if ($Mode -eq 'unraid') {
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $cmdExe
+$shortcut.TargetPath = $targetExe
 $shortcut.Arguments = $cmdArgs
 $shortcut.WorkingDirectory = $projectRoot
 $shortcut.WindowStyle = 1

@@ -1,6 +1,10 @@
 #!/usr/bin/env pwsh
 # x265 Converter - Portable Launcher (PowerShell)
 
+param(
+    [string]$RemoteUrl = ''
+)
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -92,11 +96,15 @@ try {
 
 Write-Host "Launching x265 Converter..." -ForegroundColor Green
 try {
-    # Start Electron as a desktop process and verify it stays alive briefly.
-    # This avoids false fallback when PowerShell reports a stale $LASTEXITCODE.
-    # Keep the app path in one argument even with spaces/caret (e.g. C:\^ Claud\...).
     $quotedScriptDir = '"' + $ScriptDir + '"'
-    $electronProcess = Start-Process -FilePath $electronExe -ArgumentList @($quotedScriptDir) -WorkingDirectory $ScriptDir -PassThru
+    $electronArgs = @($quotedScriptDir)
+    if ($RemoteUrl) {
+        # Pass remote URL to electron-main.js via -- separator
+        $electronArgs += '--'
+        $electronArgs += '--remote-url'
+        $electronArgs += $RemoteUrl
+    }
+    $electronProcess = Start-Process -FilePath $electronExe -ArgumentList $electronArgs -WorkingDirectory $ScriptDir -PassThru
     Start-Sleep -Milliseconds 1500
 
     if ($electronProcess.HasExited) {

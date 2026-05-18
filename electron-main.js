@@ -10,6 +10,12 @@ const http = require('http');
 const PORT = 3001;
 const HOST = '127.0.0.1';
 
+// Support --remote-url <url> to connect to external server without starting local one
+const remoteUrlArg = (() => {
+  const idx = process.argv.indexOf('--remote-url');
+  return idx !== -1 ? process.argv[idx + 1] : null;
+})();
+
 let mainWindow = null;
 let serverProcess = null;
 let usesExternalServer = false;
@@ -171,10 +177,11 @@ async function createWindow() {
     }
   });
 
-  mainWindow.loadURL(`http://${HOST}:${PORT}`);
+  const appUrl = remoteUrlArg || `http://${HOST}:${PORT}`;
+  mainWindow.loadURL(appUrl);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(`http://${HOST}:${PORT}/`)) {
+    if (url.startsWith(appUrl)) {
       return { action: 'allow', overrideBrowserWindowOptions: { width: 1460, height: 920, title: 'x265 Converter — Podgląd' } };
     }
     return { action: 'deny' };
@@ -243,15 +250,21 @@ ipcMain.handle('open-files-dialog', async () => {
 
 app.whenReady().then(async () => {
   try {
-    try {
-      await waitForPort(PORT, HOST, 1200);
-      await waitForHealthyServer(PORT, HOST, 2000);
+    if (remoteUrlArg) {
+      // Remote mode: connect directly to external server, skip local startup
       usesExternalServer = true;
-      console.log(`[electron] Reusing existing server at http://${HOST}:${PORT}`);
-    } catch (_error) {
-      usesExternalServer = false;
-      await startServer();
-      await waitForPort(PORT, HOST);
+      console.log(`[electron] Remote mode: connecting to ${remoteUrlArg}`);
+    } else {
+      try {
+        await waitForPort(PORT, HOST, 1200);
+        await waitForHealthyServer(PORT, HOST, 2000);
+        usesExternalServer = true;
+        console.log(`[electron] Reusing existing server at http://${HOST}:${PORT}`);
+      } catch (_error) {
+        usesExternalServer = false;
+        await startServer();
+        await waitForPort(PORT, HOST);
+      }
     }
 
     await createWindow();
