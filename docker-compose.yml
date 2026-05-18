@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  x265-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: x265-converter
+    hostname: x265-converter
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      PUBLIC_URL: "http://${UNRAID_IP}:3001"
+      AUTO_OPEN_BROWSER: "0"
+      FILE_OPEN_ENABLED: "0"
+      APP_TMP_DIR: /tmp/x265-converter
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
+    volumes:
+      # Folder z plikami video
+      - /mnt/user/media:/data
+      # Folder roboczy (cache, tymczasowe)
+      - /mnt/user/appdata/x265-converter/tmp:/tmp/x265-converter
+      # Wyniki konwersji (opcjonalnie inny folder)
+      - /mnt/user/downloads:/downloads
+    restart: unless-stopped
+    # Limity zasobów (dostosuj do Unraid)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2G
+        reservations:
+          cpus: '2'
+          memory: 1G

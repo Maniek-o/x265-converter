@@ -1,0 +1,165 @@
+<!doctype html> 
+<html lang="pl"> 
+    <head> 
+        <meta charset="utf-8"> 
+        <meta name="viewport" content="width=device-width, initial-scale=1"> 
+        <title>x265 Converter</title>         
+        <link rel="stylesheet" href="/style.css"> 
+    </head>     
+    <body> 
+        <main class="app-shell"> 
+            <nav class="menu-strip" aria-label="Nawigacja aplikacji"> 
+                <button class="menu-btn" type="button" data-nav-action="source">Źródło</button>                 
+                <button class="menu-btn" type="button" data-nav-action="presets">Presety</button>                 
+                <button class="menu-btn" type="button" data-nav-action="queue">Kolejka</button>                 
+                <button class="menu-btn" type="button" data-nav-action="help">Pomoc</button>                 
+            </nav>             
+            <div class="toolbar-strip" aria-hidden="true"> 
+                <div class="toolbar-group">                      
+                    <span class="toolbar-chip">Folder / Pliki</span> 
+                </div>                 
+                <div class="toolbar-group">                                           
+</div>                 
+                <div class="toolbar-group">                                           
+</div>                 
+            </div>             
+            <header class="topbar panel"> 
+                <div> 
+                    <p class="eyebrow">x265 Converter</p> 
+                    <h1>Source, Preset, Queue</h1> 
+                    <p class="lead">Profil desktop: szybkie ustawienia, czytelna kolejka, workflow wsadowy.</p> 
+                </div>                 
+                <div class="topbar-meta"> 
+                    <p id="backendMarker" class="muted compact">Backend: sprawdzanie...</p> 
+                    <button id="themeToggle" class="ghost small" type="button" aria-label="Przełącz motyw" aria-pressed="false">Motyw: Jasny</button>                     
+                    <span id="presetChip" class="chip">Preset: CPU | quality | source FPS | 55%</span> 
+                </div>                 
+            </header>             
+            <section class="workspace-grid"> 
+                <section id="sourceSection" class="panel source-panel"> 
+                    <div class="block-head"> 
+                        <h2>Wybór źródła</h2> 
+                        <span class="muted compact">Skan rekurencyjny podfolderów</span> 
+                    </div>                     
+                    <div class="path-row"> 
+                        <input id="sourcePath" type="text" placeholder="Wklej ścieżkę folderu, np. C:\\Video\\Do konwersji"> 
+                        <button id="browseBtn" class="ghost">Wybierz folder</button>                         
+                        <button id="scanBtn" class="secondary">Skanuj</button>                         
+                    </div>                     
+                    <div class="dropzone" id="dropzone"> 
+                        <p>Przeciągnij pliki video tutaj</p> 
+                        <button id="addFilesBtn" class="ghost">Dodaj pliki z dysku</button>                         
+                    </div>                     
+                    <p id="scanStatus" class="muted">Dodaj pliki drag&drop, wybierz folder lub wklej ścieżkę i kliknij Skanuj.</p> 
+                    <div class="file-list-header"> 
+                        <h3>Pliki do kolejki</h3> 
+                        <div class="inline-actions">
+                            <button id="clearFilesBtn" class="ghost">Wyczyść pliki do kolejki</button>
+                            <button id="toggleSelectionBtn" class="ghost">Zaznacz Wszystko&nbsp;</button>
+                        </div>                        
+                    </div>                     
+                    <div id="filesList" class="file-list empty-state">Brak danych do wyświetlenia.</div>                     
+                </section>                 
+                <aside id="settingsSection" class="panel settings-panel"> 
+                    <h2>Ustawienia</h2> 
+                    <div class="settings-tabs" role="tablist" aria-label="Zakładki ustawień">                                                   
+                        <button class="settings-tab is-active" type="button" data-settings-tab="summary" aria-selected="true">Podsumowanie</button>
+                        <button class="settings-tab" type="button" data-settings-tab="filters" role="tab" aria-selected="false">Filtry</button>                         
+                        <button class="settings-tab" type="button" data-settings-tab="video" role="tab" aria-selected="false">Wideo</button>                         
+                        <button class="settings-tab" type="button" data-settings-tab="audio" role="tab" aria-selected="false">Audio</button>                                                  
+                    </div>                     
+                    <section class="settings-panel-body" data-settings-panel="summary"> 
+                        <p class="muted compact">Źródło: kolejka wsadowa z automatycznym pomijaniem plików HEVC i nazw zawierających --- x265.</p> 
+                        <p id="smartQualityHint" class="muted compact">Probe-based 1-pass (próbki): wyłączony.</p> 
+                        <button id="queueBtn" class="primary">Dodaj zaznaczone do kolejki</button>                         
+                        <p class="muted compact">Pliki już w HEVC/x265 będą automatycznie pomijane.</p> 
+                    </section>                     
+                    <section class="settings-panel-body" data-settings-panel="dimensions" hidden> 
+                        <p class="muted compact">Tryb źródłowy: bez skalowania i cropowania, zgodnie z materiałem wejściowym.</p> 
+                        <label class="field-label test-mode-toggle"> 
+                            <input id="testClipEnabled" type="checkbox"> 
+                            <span>Tryb testowy: konwertuj tylko 1 minutę</span> 
+                        </label>                         
+                    </section>                     
+                    <section class="settings-panel-body" data-settings-panel="filters" hidden> 
+                        <label class="field-label test-mode-toggle"> 
+                            <input id="smartQualityEnabled" type="checkbox" checked> 
+                            <span>Probe-based 1-pass (próbki): 3x10s próbek, wybór najlepszej oszczędności przy małej stracie</span> 
+                        </label>                         
+                    </section>                     
+                    <section class="settings-panel-body" data-settings-panel="video" hidden> 
+                        <div class="setting-stack"> 
+                            <span class="field-label">Silnik</span> 
+                            <div class="segmented-control" id="encoderSwitch"> 
+                                <button data-value="cpu" class="is-active">CPU · libx265</button>                                 
+                                <button data-value="gpu">GPU · hevc_nvenc</button>                                 
+                            </div>                             
+                        </div>                         
+                        <div class="setting-stack"> 
+                            <label class="field-label" for="fpsMode">FPS</label>                             
+                            <select id="fpsMode"> 
+                                <option value="source" selected>Zachowaj źródłowe FPS</option>                                 
+                                <option value="24">24 fps (telewizyjne)</option>                                 
+                            </select>                             
+                        </div>                         
+                        <div class="setting-stack"> 
+                            <label class="field-label" for="targetPercent">Docelowy rozmiar: <span id="targetPercentValue">55%</span>
+                            </label>                             
+                            <input id="targetPercent" type="range" min="20" max="95" step="1" value="55"> 
+                        </div>                         
+                        <div class="setting-stack"> 
+                            <label class="field-label" for="qualityPreset">Profil</label>                             
+                            <select id="qualityPreset"> 
+                                <option value="quality" selected>Jakość</option>                                 
+                                <option value="balanced">Balans</option>                                 
+                                <option value="speed">Szybkość</option>                                 
+                            </select>                             
+                        </div>                         
+                    </section>                     
+                    <section class="settings-panel-body" data-settings-panel="audio" hidden> 
+                        <div class="setting-stack"> 
+                            <label class="field-label" for="audioCodec">Audio</label>                             
+                            <select id="audioCodec"> 
+                                <option value="opus" selected>Opus</option>                                 
+                                <option value="copy">Copy bez zmian</option>                                 
+                            </select>                             
+                        </div>                         
+                        <div class="setting-stack"> 
+                            <label class="field-label" for="audioBitrate">Bitrate audio Opus</label>                             
+                            <select id="audioBitrate"> 
+                                <option value="64">64 kb/s</option>                                 
+                                <option value="96" selected>96 kb/s</option>                                 
+                                <option value="128">128 kb/s</option>                                 
+                                <option value="160">160 kb/s</option>                                 
+                            </select>                             
+                        </div>                         
+                    </section>                     
+                    <section class="settings-panel-body" data-settings-panel="subtitles" hidden> 
+                        <p class="muted compact">Napisy: aktualnie przepisywane automatycznie z materiału źródłowego (copy).</p> 
+                    </section>                     
+                </aside>                 
+            </section>             
+            <section id="queueSection" class="panel queue-panel"> 
+                <div class="queue-header"> 
+                    <h2>Kolejka</h2> 
+                    <div class="queue-controls"> 
+                        <button id="resumeAllBtn" class="ghost">Wznów wszystkie</button>                         
+                        <button id="stopAllBtn" class="ghost">Zatrzymaj wszystko</button>                         
+                        <button id="clearQueueBtn" class="ghost">Wyczyść kolejkę</button>                         
+                        <button id="refreshBtn" class="ghost">Odśwież</button>                         
+                    </div>                     
+                </div>                 
+                <div class="overall-progress"> 
+                    <span id="overallProgressLabel">Całość przekonwertowana: 0.0%</span> 
+                    <div class="progress-shell"> 
+                        <div id="overallProgressBar" class="progress-bar" style="width:0%"></div>                         
+                    </div>                     
+                </div>                 
+                <div id="queueStats" class="queue-stats">Brak aktywnych zadań.</div>                 
+                <div id="queueLastRefreshed" class="muted compact">Ostatnio odświeżono: —</div>                 
+                <div id="jobsList" class="jobs-list empty-state">Kolejka jest pusta.</div>                 
+            </section>             
+        </main>         
+        <script src="/app.js"></script>         
+    </body>     
+</html>

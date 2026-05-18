@@ -1,0 +1,23 @@
+{
+  "name": "x265-converter",
+  "version": "1.0.0",
+  "description": "Local batch video converter to HEVC/x265 with CPU/GPU switch.",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "node server.js",
+    "electron": "electron .",
+    "dev:web": "node ./node_modules/nodemon/bin/nodemon.js --watch server.js --watch public --ext js,css,html --signal SIGTERM server.js",
+    "dev:electron": "node ./node_modules/nodemon/bin/nodemon.js --watch electron-main.js --watch preload.js --watch server.js --watch public --ext js,css,html --signal SIGTERM --exec \"set ELECTRON_DEV_PROFILE=1&& node ./node_modules/electron/cli.js .\""
+  },
+  "devDependencies": {
+    "electronmon": "^2.0.2",
+    "nodemon": "^3.1.10"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "electron": "^34.0.0",
+    "express": "^4.21.2",
+    "ffprobe-static": "^3.1.0",
+    "open": "^10.1.0"
+  }
+}

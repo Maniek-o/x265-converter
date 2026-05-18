@@ -1,0 +1,11 @@
+node_modules
+tmp
+.git
+.gitignore
+npm-debug.log
+Dockerfile
+docker-compose.yml
+README.md
+*.log
+public/_pgbackup
+_pgbackup

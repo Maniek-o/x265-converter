@@ -1,0 +1,1152 @@
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m4v', '.mpg', '.mpeg']);
+const THEME_STORAGE_KEY = 'x265-theme';
+const IS_DESKTOP_RUNTIME = Boolean(
+  (window.electronAPI && window.electronAPI.isElectron) ||
+  String(navigator.userAgent || '').includes('Electron')
+);
+
+const state = {
+  scannedFiles: [],
+  jobs: [],
+  summary: null,
+  jobsRefreshPromise: null,
+  lastJobsRefreshAt: null,
+  backendMarkerText: 'Backend: sprawdzanie...',
+  settings: {
+    encoder: 'cpu',
+    fpsMode: 'source',
+    targetPercent: 55,
+    qualityPreset: 'quality',
+    audioCodec: 'opus',
+    audioBitrateKbps: 96,
+    testClipEnabled: false,
+    smartQuality: true
+  }
+};
+
+let previewWindowRef = null;
+
+const elements = {
+  sourcePath: document.querySelector('#sourcePath'),
+  browseBtn: document.querySelector('#browseBtn'),
+  scanBtn: document.querySelector('#scanBtn'),
+  addFilesBtn: document.querySelector('#addFilesBtn'),
+  dropzone: document.querySelector('#dropzone'),
+  scanStatus: document.querySelector('#scanStatus'),
+  filesList: document.querySelector('#filesList'),
+  clearFilesBtn: document.querySelector('#clearFilesBtn'),
+  toggleSelectionBtn: document.querySelector('#toggleSelectionBtn'),
+  encoderSwitch: document.querySelector('#encoderSwitch'),
+  fpsMode: document.querySelector('#fpsMode'),
+  targetPercent: document.querySelector('#targetPercent'),
+  targetPercentValue: document.querySelector('#targetPercentValue'),
+  qualityPreset: document.querySelector('#qualityPreset'),
+  audioCodec: document.querySelector('#audioCodec'),
+  audioBitrate: document.querySelector('#audioBitrate'),
+  testClipEnabled: document.querySelector('#testClipEnabled'),
+  smartQualityEnabled: document.querySelector('#smartQualityEnabled'),
+  smartQualityHint: document.querySelector('#smartQualityHint'),
+  queueBtn: document.querySelector('#queueBtn'),
+  resumeAllBtn: document.querySelector('#resumeAllBtn'),
+  stopAllBtn: document.querySelector('#stopAllBtn'),
+  clearQueueBtn: document.querySelector('#clearQueueBtn'),
+  refreshBtn: document.querySelector('#refreshBtn'),
+  overallProgressLabel: document.querySelector('#overallProgressLabel'),
+  overallProgressBar: document.querySelector('#overallProgressBar'),
+  queueStats: document.querySelector('#queueStats'),
+  queueLastRefreshed: document.querySelector('#queueLastRefreshed'),
+  backendMarker: document.querySelector('#backendMarker'),
+  presetChip: document.querySelector('#presetChip'),
+  themeToggle: document.querySelector('#themeToggle'),
+  jobsList: document.querySelector('#jobsList')
+};
+
+const settingsTabButtons = Array.from(document.querySelectorAll('[data-settings-tab]'));
+const settingsTabPanels = Array.from(document.querySelectorAll('[data-settings-panel]'));
+const topNavButtons = Array.from(document.querySelectorAll('[data-nav-action]'));
+
+elements.scanBtn?.addEventListener('click', handleScan);
+elements.browseBtn?.addEventListener('click', handleBrowseFolder);
+elements.addFilesBtn?.addEventListener('click', handleAddFilesDialog);
+elements.clearFilesBtn?.addEventListener('click', clearFilesToQueue);
+elements.toggleSelectionBtn?.addEventListener('click', toggleSelection);
+elements.queueBtn?.addEventListener('click', enqueueSelected);
+elements.resumeAllBtn?.addEventListener('click', resumeAllJobs);
+elements.stopAllBtn?.addEventListener('click', stopAllJobs);
+elements.clearQueueBtn?.addEventListener('click', clearQueue);
+elements.refreshBtn?.addEventListener('click', refreshJobs);
+elements.targetPercent?.addEventListener('input', (event) => {
+  state.settings.targetPercent = Number(event.target.value);
+  elements.targetPercentValue.textContent = `${state.settings.targetPercent}%`;
+  updatePresetChip();
+});
+elements.qualityPreset?.addEventListener('change', (event) => {
+  state.settings.qualityPreset = event.target.value;
+  updatePresetChip();
+});
+elements.audioCodec?.addEventListener('change', (event) => {
+  state.settings.audioCodec = event.target.value;
+});
+elements.audioBitrate?.addEventListener('change', (event) => {
+  state.settings.audioBitrateKbps = Number(event.target.value);
+});
+elements.fpsMode?.addEventListener('change', (event) => {
+  state.settings.fpsMode = event.target.value === '24' ? '24' : 'source';
+  updatePresetChip();
+});
+elements.testClipEnabled?.addEventListener('change', (event) => {
+  state.settings.testClipEnabled = event.target.checked;
+});
+elements.smartQualityEnabled?.addEventListener('change', async (event) => {
+  state.settings.smartQuality = event.target.checked;
+  await refreshSmartQualityHint();
+});
+
+elements.encoderSwitch?.querySelectorAll('button').forEach((button) => {
+  button.addEventListener('click', () => {
+    state.settings.encoder = button.dataset.value;
+    elements.encoderSwitch.querySelectorAll('button').forEach((item) => {
+      item.classList.toggle('is-active', item === button);
+    });
+    updatePresetChip();
+  });
+});
+
+setupDropzone();
+setupSettingsTabs();
+setupTopNav();
+setupThemeToggle();
+
+setInterval(() => {
+  void refreshJobs();
+  void refreshBackendMarker();
+}, 2000);
+
+void refreshBackendMarker();
+void refreshJobs();
+void refreshSmartQualityHint();
+updatePresetChip();
+
+function updatePresetChip() {
+  if (!elements.presetChip) {
+    return;
+  }
+
+  const encoderLabel = state.settings.encoder === 'gpu' ? 'GPU' : 'CPU';
+  const qualityLabel = String(state.settings.qualityPreset || 'quality');
+  const fpsLabel = state.settings.fpsMode === '24' ? '24 FPS' : 'source FPS';
+  const targetPercent = Number.isFinite(Number(state.settings.targetPercent))
+    ? Math.round(Number(state.settings.targetPercent))
+    : 55;
+
+  elements.presetChip.textContent = `Preset: ${encoderLabel} | ${qualityLabel} | ${fpsLabel} | ${targetPercent}%`;
+}
+
+async function handleBrowseFolder() {
+  if (!window.electronAPI || typeof window.electronAPI.openFolderDialog !== 'function') {
+    setScanStatus('Wybór folderu działa tylko w aplikacji desktop (Electron).', true);
+    return;
+  }
+
+  try {
+    const selected = await window.electronAPI.openFolderDialog();
+    if (selected) {
+      elements.sourcePath.value = selected;
+      setScanStatus('Wybrano folder. Kliknij Skanuj.', false);
+    }
+  } catch (error) {
+    setScanStatus(error.message || 'Nie udało się wybrać folderu.', true);
+  }
+}
+
+async function handleAddFilesDialog() {
+  if (!window.electronAPI || typeof window.electronAPI.openFilesDialog !== 'function') {
+    setScanStatus('Dodawanie plików przez dialog działa tylko w aplikacji desktop (Electron).', true);
+    return;
+  }
+
+  try {
+    const selected = await window.electronAPI.openFilesDialog();
+    const files = (Array.isArray(selected) ? selected : []).map((item) => {
+      if (typeof item === 'string') {
+        return {
+          path: item,
+          name: basename(item),
+          sizeBytes: 0
+        };
+      }
+
+      const filePath = String(item?.path || '').trim();
+      return {
+        path: filePath,
+        name: String(item?.name || basename(filePath)),
+        sizeBytes: Number(item?.sizeBytes || 0)
+      };
+    }).filter((file) => file.path);
+
+    mergeScannedFiles(files);
+    setScanStatus(`Dodano pliki: ${files.length}.`, false);
+  } catch (error) {
+    setScanStatus(error.message || 'Nie udało się dodać plików.', true);
+  }
+}
+
+function setupDropzone() {
+  if (!elements.dropzone) return;
+
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    elements.dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      elements.dropzone.classList.add('is-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((eventName) => {
+    elements.dropzone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      elements.dropzone.classList.remove('is-over');
+    });
+  });
+
+  elements.dropzone.addEventListener('drop', (event) => {
+    const fallbackDroppedPaths = extractDroppedPathsFromDataTransfer(event.dataTransfer);
+    const droppedRaw = Array.from(event.dataTransfer?.files || [])
+      .map((file, index) => {
+        const resolvedPath = resolveDroppedPath(file) || fallbackDroppedPaths[index] || '';
+        return {
+          path: resolvedPath,
+          name: file.name || basename(resolvedPath || ''),
+          sizeBytes: Number(file.size || 0),
+          extension: extname(resolvedPath || file.name || '')
+        };
+      });
+
+    if (!droppedRaw.length) {
+      setScanStatus('Drop nie zawiera plików.', true);
+      return;
+    }
+
+    const droppedSupported = droppedRaw
+      .filter((file) => file.path && VIDEO_EXTENSIONS.has(file.extension));
+
+    const droppedMissingPathSupported = droppedRaw
+      .filter((file) => !file.path && VIDEO_EXTENSIONS.has(file.extension));
+
+    const unsupportedExtensions = new Map();
+    droppedRaw.forEach((file) => {
+      if (!VIDEO_EXTENSIONS.has(file.extension)) {
+        const label = file.extension || '(bez rozszerzenia)';
+        unsupportedExtensions.set(label, (unsupportedExtensions.get(label) || 0) + 1);
+      }
+    });
+
+    const missingPathSupportedExtensions = new Map();
+    droppedMissingPathSupported.forEach((file) => {
+      const label = file.extension || '(bez rozszerzenia)';
+      missingPathSupportedExtensions.set(label, (missingPathSupportedExtensions.get(label) || 0) + 1);
+    });
+
+    const unsupportedSummary = [...unsupportedExtensions.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], 'pl'))
+      .map(([extension, count]) => `${extension}${count > 1 ? ` x${count}` : ''}`)
+      .join(', ');
+
+    const missingPathSummary = [...missingPathSupportedExtensions.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], 'pl'))
+      .map(([extension, count]) => `${extension}${count > 1 ? ` x${count}` : ''}`)
+      .join(', ');
+
+    if (!droppedSupported.length) {
+      if (missingPathSummary) {
+        let message = `Wykryto obsługiwane pliki video (${missingPathSummary}), ale aplikacja nie dostała lokalnej ścieżki pliku z drop.`;
+        if (unsupportedSummary) {
+          message += ` Dodatkowo odrzucono: ${unsupportedSummary}.`;
+        }
+        if (IS_DESKTOP_RUNTIME) {
+          message += ' Użyj przycisku "Dodaj pliki z dysku" dla tych pozycji.';
+        } else {
+          message += ' Jesteś w trybie WWW: użyj skanowania folderu albo uruchom aplikację desktop (Electron).';
+        }
+        setScanStatus(message, true);
+        return;
+      }
+
+      const message = unsupportedSummary
+        ? `Brak obsługiwanych plików video w drop. Odrzucono: ${unsupportedSummary}.`
+        : 'Brak obsługiwanych plików video w drop.';
+      setScanStatus(message, true);
+      return;
+    }
+
+    const addedCount = mergeScannedFiles(droppedSupported);
+    const skippedUnsupported = droppedRaw.filter((file) => !VIDEO_EXTENSIONS.has(file.extension)).length;
+    const skippedMissingPath = droppedMissingPathSupported.length;
+    const skippedDuplicates = droppedSupported.length - addedCount;
+
+    if (!addedCount) {
+      setScanStatus('Pliki z drop są już na liście lub nie są obsługiwane.', true);
+      return;
+    }
+
+    let statusMessage = `Dodano przez drag&drop: ${addedCount} plików.`;
+    if (skippedUnsupported > 0) {
+      statusMessage += ` Pominięto nieobsługiwane: ${skippedUnsupported}`;
+      if (unsupportedSummary) {
+        statusMessage += ` (${unsupportedSummary})`;
+      }
+      statusMessage += '.';
+    }
+    if (skippedMissingPath > 0) {
+      statusMessage += ` Bez lokalnej ścieżki z drop: ${skippedMissingPath}`;
+      if (missingPathSummary) {
+        statusMessage += ` (${missingPathSummary})`;
+      }
+      if (IS_DESKTOP_RUNTIME) {
+        statusMessage += '. Użyj "Dodaj pliki z dysku" dla tych pozycji.';
+      } else {
+        statusMessage += '. W trybie WWW użyj skanowania folderu lub aplikacji desktop.';
+      }
+    }
+    if (skippedDuplicates > 0) {
+      statusMessage += ` Pominięto duplikaty: ${skippedDuplicates}.`;
+    }
+
+    setScanStatus(statusMessage, false);
+  });
+}
+
+async function refreshSmartQualityHint() {
+  if (!elements.smartQualityHint) return;
+
+  if (!state.settings.smartQuality) {
+    elements.smartQualityHint.textContent = 'Probe-based 1-pass (próbki): wyłączony.';
+    return;
+  }
+
+  const selected = state.scannedFiles.find((file) => file.selected) || state.scannedFiles[0];
+  if (!selected) {
+    elements.smartQualityHint.textContent = 'Probe-based 1-pass (próbki): włączony. Zaznacz plik, aby zobaczyć analizę.';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/suggest-quality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: selected.path })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Brak sugestii Probe-based 1-pass (próbki).');
+    }
+
+    const v = payload.analysis || {};
+    const fps = Number(v.fps || 0);
+    const probeCrf = Number(payload.crf || 24);
+    // Build same adaptive candidate range as server (±2 from probe CRF, clamped 20-30)
+    const rawCands = [-2, -1, 0, 1, 2].map((d) => Math.max(20, Math.min(30, probeCrf + d)));
+    const cands = [...new Set(rawCands)];
+    const candHtml = cands.map((c) => {
+      // Each CRF step ≈ 6% size change relative to probe CRF
+      const pct = Math.round(100 * Math.pow(0.94, c - probeCrf));
+      const cls = c === probeCrf ? 'sq-cand sq-cand-base' : 'sq-cand';
+      return `<span class="${cls}">CRF&nbsp;${c}&nbsp;(~${pct}%)</span>`;
+    }).join('<span class="sq-arrow"> → </span>');
+    const warnHtml = payload.warning
+      ? `<span class="sq-warn"> · ${payload.warning}</span>`
+      : '';
+    elements.smartQualityHint.innerHTML =
+      `<b>Probe-based 1-pass (próbki)</b>: bazowo&nbsp;CRF&nbsp;<b>${probeCrf}</b> · ` +
+      `${v.width || 0}×${v.height || 0}, ${fps.toFixed(1)}&nbsp;fps, <em>${v.codec || 'unknown'}</em>${warnHtml}` +
+      `<br><span class="sq-label">Kandydaci próbkowania: </span>${candHtml}`;
+  } catch (error) {
+    elements.smartQualityHint.textContent = `Probe-based 1-pass (próbki): błąd analizy (${error.message}).`;
+  }
+}
+
+async function handleScan() {
+  const sourcePath = elements.sourcePath.value.trim();
+  if (!sourcePath) {
+    setScanStatus('Podaj folder do skanowania.', true);
+    return;
+  }
+
+  setScanStatus('Skanuję folder rekurencyjnie...', false);
+  try {
+    const response = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Skanowanie nie powiodło się.');
+    }
+
+    mergeScannedFiles(payload.files);
+    await refreshSmartQualityHint();
+    setScanStatus(`Znaleziono ${payload.files.length} plików video (rekurencyjnie).`, false);
+  } catch (error) {
+    setScanStatus(error.message, true);
+  }
+}
+
+function mergeScannedFiles(newFiles) {
+  const byPath = new Map(state.scannedFiles.map((file) => [file.path.toLowerCase(), file]));
+  let addedCount = 0;
+  for (const file of newFiles) {
+    const normalizedPath = String(file.path || '').trim();
+    if (!normalizedPath || !VIDEO_EXTENSIONS.has(extname(normalizedPath))) {
+      continue;
+    }
+
+    const key = normalizedPath.toLowerCase();
+    if (!byPath.has(key)) {
+      byPath.set(key, {
+        path: normalizedPath,
+        name: file.name || basename(normalizedPath),
+        sizeBytes: Number(file.sizeBytes || 0),
+        selected: true
+      });
+      addedCount += 1;
+    }
+  }
+
+  state.scannedFiles = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path, 'pl'));
+  renderFiles();
+  return addedCount;
+}
+
+function toggleSelection() {
+  if (!state.scannedFiles.length) return;
+  state.scannedFiles = state.scannedFiles.map((file) => ({ ...file, selected: !file.selected }));
+  renderFiles();
+  void refreshSmartQualityHint();
+}
+
+function clearFilesToQueue() {
+  if (!state.scannedFiles.length) {
+    setScanStatus('Lista plików jest już pusta.', false);
+    return;
+  }
+
+  state.scannedFiles = [];
+  renderFiles();
+  setScanStatus('Wyczyszczono pliki do kolejki.', false);
+  void refreshSmartQualityHint();
+}
+
+function renderFiles() {
+  if (!state.scannedFiles.length) {
+    elements.filesList.innerHTML = 'Brak danych do wyświetlenia.';
+    elements.filesList.classList.add('empty-state');
+    return;
+  }
+
+  elements.filesList.classList.remove('empty-state');
+  elements.filesList.innerHTML = state.scannedFiles.map((file, index) => {
+    const dirPath = dirname(file.path);
+    const slash = dirPath ? '\\' : '';
+    return `
+      <div class="file-row file-row-compact">
+        <input type="checkbox" data-index="${index}" ${file.selected ? 'checked' : ''}>
+        <span class="file-path-inline">${escapeHtml(dirPath)}${slash}<strong class="file-name-inline">${escapeHtml(file.name)}</strong></span>
+        <span class="file-size">${formatBytes(file.sizeBytes)}</span>
+        <button type="button" class="ghost small preview-btn" data-preview-index="${index}">Podgląd testowy</button>
+      </div>
+    `;
+  }).join('');
+
+  elements.filesList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+    checkbox.addEventListener('change', (event) => {
+      const index = Number(event.target.dataset.index);
+      state.scannedFiles[index].selected = event.target.checked;
+      void refreshSmartQualityHint();
+    });
+  });
+
+  elements.filesList.querySelectorAll('[data-preview-index]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const index = Number(button.dataset.previewIndex);
+      openSamplePreviewWindow(index);
+    });
+  });
+}
+
+function openSamplePreviewWindow(index) {
+  const file = state.scannedFiles[index];
+  if (!file) return;
+
+  const params = new URLSearchParams({
+    mode: 'sample',
+    sourceFile: file.path,
+    settings: JSON.stringify({
+      ...state.settings,
+      testClipEnabled: false
+    })
+  });
+
+  openPreviewWindow(`/preview.html?${params.toString()}`, `Otwarto podgląd testowy dla: ${file.name}`);
+}
+
+function openResultCompareWindow(job) {
+  const params = new URLSearchParams({
+    mode: 'result',
+    sourceFile: job.sourceFile,
+    encodedFile: job.outputPath,
+    settings: JSON.stringify(job.settings || state.settings)
+  });
+  if (job.status === 'processing') {
+    params.set('live', '1');
+  }
+  openPreviewWindow(`/preview.html?${params.toString()}`, `Otwarto porównanie wynikowe: ${basename(job.sourceFile)}`);
+}
+
+function openPreviewWindow(url, statusText) {
+  if (previewWindowRef && !previewWindowRef.closed) {
+    previewWindowRef.close();
+    previewWindowRef = null;
+  }
+
+  const features = 'popup=yes,width=1460,height=920,menubar=no,toolbar=no,location=no,status=no';
+  previewWindowRef = window.open(url, 'x265-preview-window', features);
+  if (previewWindowRef) {
+    previewWindowRef.focus();
+    setScanStatus(statusText, false);
+  } else {
+    setScanStatus('Przeglądarka zablokowała popup. Zezwól na okna dla aplikacji.', true);
+  }
+}
+
+async function enqueueSelected() {
+  const sourceFiles = state.scannedFiles.filter((file) => file.selected).map((file) => file.path);
+  if (!sourceFiles.length) {
+    setScanStatus('Zaznacz przynajmniej jeden plik.', true);
+    return;
+  }
+
+  elements.queueBtn.disabled = true;
+  try {
+    const response = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceFiles, settings: state.settings })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Dodanie do kolejki nie powiodło się.');
+    }
+
+    await refreshJobs();
+    setScanStatus(`Dodano ${payload.jobs.length} pozycji do kolejki.`, false);
+  } catch (error) {
+    setScanStatus(error.message, true);
+  } finally {
+    elements.queueBtn.disabled = false;
+  }
+}
+
+async function refreshJobs() {
+  if (state.jobsRefreshPromise) return state.jobsRefreshPromise;
+
+  state.jobsRefreshPromise = (async () => {
+    try {
+      const response = await fetch('/api/jobs');
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Nie udało się odświeżyć kolejki.');
+      }
+
+      state.jobs = payload.jobs || [];
+      state.summary = payload.summary || null;
+      state.lastJobsRefreshAt = new Date();
+      renderJobs();
+    } catch (error) {
+      elements.queueStats.textContent = error.message;
+    } finally {
+      state.jobsRefreshPromise = null;
+    }
+  })();
+
+  return state.jobsRefreshPromise;
+}
+
+async function resumeAllJobs() {
+  elements.resumeAllBtn.disabled = true;
+  try {
+    const response = await fetch('/api/queue/resume-all', { method: 'POST' });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Nie udało się wznowić zadań.');
+    }
+
+    state.jobs = payload.jobs || [];
+    state.summary = payload.summary || null;
+    renderJobs();
+    if (payload.resumedCount > 0) {
+      elements.queueStats.textContent = `Wznowiono ${payload.resumedCount} zadań.`;
+    } else {
+      elements.queueStats.textContent = 'Brak zadań do wznowienia.';
+    }
+  } catch (error) {
+    elements.queueStats.textContent = error.message;
+  } finally {
+    elements.resumeAllBtn.disabled = false;
+  }
+}
+
+async function stopAllJobs() {
+  elements.stopAllBtn.disabled = true;
+  try {
+    const response = await fetch('/api/queue/stop-all', { method: 'POST' });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Nie udało się zatrzymać zadań.');
+    }
+
+    state.jobs = payload.jobs || [];
+    state.summary = payload.summary || null;
+    renderJobs();
+  } catch (error) {
+    elements.queueStats.textContent = error.message;
+  } finally {
+    elements.stopAllBtn.disabled = false;
+  }
+}
+
+async function clearQueue() {
+  const shouldClear = window.confirm('Na pewno zatrzymać i usunąć całą kolejkę?');
+  if (!shouldClear) return;
+
+  elements.clearQueueBtn.disabled = true;
+  try {
+    const response = await fetch('/api/queue', { method: 'DELETE' });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Nie udało się wyczyścić kolejki.');
+    }
+
+    state.jobs = payload.jobs || [];
+    state.summary = payload.summary || null;
+    renderJobs();
+  } catch (error) {
+    elements.queueStats.textContent = error.message;
+  } finally {
+    elements.clearQueueBtn.disabled = false;
+  }
+}
+
+function renderJobs() {
+  renderQueueLastRefreshed();
+  updateTopNavQueueState();
+
+  if (!state.jobs.length) {
+    renderOverallProgress(0);
+    elements.queueStats.textContent = 'Brak aktywnych zadań.';
+    elements.jobsList.textContent = 'Kolejka jest pusta.';
+    elements.jobsList.classList.add('empty-state');
+    return;
+  }
+
+  const summary = state.summary || {
+    preparing: state.jobs.filter((job) => job.status === 'preparing').length,
+    processing: state.jobs.filter((job) => job.status === 'processing').length,
+    queued: state.jobs.filter((job) => job.status === 'queued').length,
+    completed: state.jobs.filter((job) => job.status === 'completed').length,
+    skipped: state.jobs.filter((job) => job.status === 'skipped').length,
+    failed: state.jobs.filter((job) => job.status === 'failed').length,
+    cancelled: state.jobs.filter((job) => job.status === 'cancelled').length,
+    overallProgressPercent: 0
+  };
+
+  renderOverallProgress(summary.overallProgressPercent || 0);
+  elements.queueStats.textContent =
+    `Przygotowywane: ${summary.preparing || 0} · Aktywne: ${summary.processing} · W kolejce: ${summary.queued} · Gotowe: ${summary.completed} · Pominięte HEVC: ${summary.skipped || 0} · Błędy: ${summary.failed} · Anulowane: ${summary.cancelled}`;
+
+  elements.jobsList.classList.remove('empty-state');
+  elements.jobsList.innerHTML = `
+    <div class="queue-table-wrap">
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Plik</th>
+            <th>Postęp</th>
+            <th>Rozmiar</th>
+            <th>Czas</th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.jobs.map((job) => renderJobRow(job)).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  elements.jobsList.querySelectorAll('[data-cancel-job]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const jobId = Number(button.dataset.cancelJob);
+      try {
+        await fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+        await refreshJobs();
+      } catch (error) {
+        elements.queueStats.textContent = error.message || 'Nie udało się anulować zadania.';
+      }
+    });
+  });
+
+  elements.jobsList.querySelectorAll('[data-resume-job]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const jobId = Number(button.dataset.resumeJob);
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/resume`, { method: 'POST' });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Nie udało się wznowić zadania.');
+        }
+        await refreshJobs();
+      } catch (error) {
+        elements.queueStats.textContent = error.message || 'Nie udało się wznowić zadania.';
+      }
+    });
+  });
+
+  elements.jobsList.querySelectorAll('[data-open-output]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const filePath = button.dataset.openOutput;
+      if (!filePath) return;
+      try {
+        await fetch('/api/open-path', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath })
+        });
+      } catch (error) {
+        elements.queueStats.textContent = error.message || 'Nie udało się otworzyć pliku wynikowego.';
+      }
+    });
+  });
+
+  elements.jobsList.querySelectorAll('[data-compare-output]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const jobId = Number(button.dataset.compareOutput);
+      const job = state.jobs.find((item) => item.id === jobId);
+      if (job) {
+        openResultCompareWindow(job);
+      }
+    });
+  });
+
+  elements.jobsList.querySelectorAll('[data-preview-source]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const pathValue = button.dataset.previewSource;
+      const index = state.scannedFiles.findIndex((file) => file.path === pathValue);
+      if (index >= 0) {
+        openSamplePreviewWindow(index);
+      } else {
+        openPreviewWindow(`/preview.html?${new URLSearchParams({
+          mode: 'sample',
+          sourceFile: pathValue,
+          settings: JSON.stringify(state.settings)
+        }).toString()}`, 'Otwarto podgląd testowy.');
+      }
+    });
+  });
+}
+
+function setupTopNav() {
+  if (!topNavButtons.length) {
+    return;
+  }
+
+  topNavButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.navAction;
+      if (action === 'source') {
+        document.querySelector('#sourceSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
+      if (action === 'presets') {
+        document.querySelector('#settingsSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const summaryTab = settingsTabButtons.find((item) => item.dataset.settingsTab === 'summary');
+        summaryTab?.click();
+        return;
+      }
+
+      if (action === 'queue') {
+        document.querySelector('#queueSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
+      if (action === 'help') {
+        setScanStatus('Pomoc: przeciągnij pliki video lub użyj "Dodaj pliki z dysku", potem kliknij "Dodaj zaznaczone do kolejki".', false);
+      }
+    });
+  });
+
+  updateTopNavQueueState();
+}
+
+function updateTopNavQueueState() {
+  const queueButton = topNavButtons.find((button) => button.dataset.navAction === 'queue');
+  if (!queueButton) {
+    return;
+  }
+
+  const hasQueueItems = Array.isArray(state.jobs) && state.jobs.length > 0;
+  queueButton.classList.toggle('is-attention', hasQueueItems);
+  queueButton.setAttribute('aria-label', hasQueueItems ? 'Kolejka (aktywna)' : 'Kolejka');
+}
+
+function renderJobRow(job) {
+  const progress = Number(job.metrics?.progressPercent || 0);
+  const eta = job.metrics?.etaSeconds == null ? '...' : formatEta(job.metrics.etaSeconds);
+  const fps = job.metrics?.fps ? `${job.metrics.fps.toFixed(1)} fps` : '0 fps';
+  const sourceSize = Number(job.metrics?.sourceSizeBytes || 0);
+  const outputSize = Number(job.metrics?.currentSizeBytes || 0);
+  const conversionSeconds = job.metrics?.conversionSeconds;
+  const status = statusLabel(job.status);
+
+  const savedPercent = Number(job.sizeSavedPercent);
+  const hasSavings = Number.isFinite(savedPercent);
+  const savingsText = hasSavings ? `${savedPercent >= 0 ? '-' : '+'}${Math.abs(savedPercent).toFixed(1)}%` : '-';
+  const savingsClass = hasSavings ? (savedPercent >= 0 ? 'good' : 'bad') : '';
+
+  const canCompareResult = (job.status === 'completed' || job.status === 'processing') && Boolean(job.outputPath);
+  const canOpenResult = job.status === 'completed' && Boolean(job.outputPath);
+
+  const notes = [];
+  if (job.skipReason) notes.push(job.skipReason);
+  if (job.error) notes.push(`Błąd: ${job.error}`);
+  const notesHtml = notes.length ? `<div class="job-row-note">${escapeHtml(notes.join(' | '))}</div>` : '';
+
+  const actions = [];
+  if (job.status === 'processing' || job.status === 'queued' || job.status === 'preparing') {
+    actions.push(`<button class="ghost small" data-cancel-job="${job.id}">Anuluj</button>`);
+  }
+  if (job.status === 'cancelled' || job.status === 'failed') {
+    actions.push(`<button class="ghost small" data-resume-job="${job.id}">Wznów</button>`);
+  }
+  actions.push(`<button class="action-btn small" data-preview-source="${escapeHtmlAttr(job.sourceFile)}">Podgląd</button>`);
+  if (canCompareResult) {
+    const compareLabel = job.status === 'processing' ? 'Podgląd na żywo' : 'Porównaj';
+    actions.push(`<button class="action-btn small" data-compare-output="${job.id}">${compareLabel}</button>`);
+  }
+  if (canOpenResult) {
+    actions.push(`<button class="action-btn small" data-open-output="${escapeHtmlAttr(job.outputPath)}">Otwórz</button>`);
+  }
+
+  return `
+    <tr class="queue-row status-${job.status}">
+      <td><span class="status-pill">${status}</span></td>
+      <td>
+        <div class="job-row-file">${escapeHtml(basename(job.sourceFile))}</div>
+        <div class="job-row-path">${escapeHtml(job.outputPath || '(brak pliku wynikowego)')}</div>
+        ${notesHtml}
+      </td>
+      <td>
+        <div class="job-row-progress">${progress.toFixed(1)}%</div>
+        <div class="inline-progress"><span style="width:${progress}%"></span></div>
+        <div class="job-row-meta">ETA: ${eta} · ${fps}</div>
+      </td>
+      <td>
+        <div>Org: ${formatBytes(sourceSize)}</div>
+        <div>Po: ${formatBytes(outputSize)}</div>
+        <div class="saving-badge ${savingsClass}">${savingsText}</div>
+      </td>
+      <td>${conversionSeconds == null ? '-' : formatEta(conversionSeconds)}</td>
+      <td><div class="row-actions">${actions.join('')}</div></td>
+    </tr>
+  `;
+}
+
+function setScanStatus(message, isError) {
+  elements.scanStatus.textContent = message;
+  elements.scanStatus.classList.toggle('error-text', Boolean(isError));
+}
+
+function statusLabel(status) {
+  const labels = {
+    preparing: 'Przygotowywanie',
+    queued: 'W kolejce',
+    processing: 'Przetwarzanie',
+    completed: 'Gotowe',
+    skipped: 'Pominięte (HEVC)',
+    failed: 'Błąd',
+    cancelled: 'Anulowane'
+  };
+  return labels[status] || status;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value.toFixed(value >= 100 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatEta(totalSeconds) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
+}
+
+function renderOverallProgress(progressPercent) {
+  const safeProgress = Math.min(100, Math.max(0, Number(progressPercent || 0)));
+  elements.overallProgressLabel.textContent = `Całość przekonwertowana: ${safeProgress.toFixed(1)}%`;
+  elements.overallProgressBar.style.width = `${safeProgress}%`;
+}
+
+function renderQueueLastRefreshed() {
+  elements.queueLastRefreshed.textContent = `Ostatnio odświeżono: ${formatRefreshTime(state.lastJobsRefreshAt)}`;
+}
+
+function formatRefreshTime(value) {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString('pl-PL');
+}
+
+async function refreshBackendMarker() {
+  try {
+    const response = await fetch('/api/health');
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Brak /api/health');
+    }
+
+    const startedAt = formatIsoDateTime(payload.startedAt);
+    const host = payload.host || '127.0.0.1';
+    const port = Number(payload.port || 3001);
+    const instanceId = payload.instanceId || 'brak';
+    const pid = Number(payload.pid || 0) || '—';
+    const cpuTotal = Number.isFinite(Number(payload.cpuUsagePercent))
+      ? `${Number(payload.cpuUsagePercent).toFixed(1)}%`
+      : '—';
+    const cpuProcess = Number.isFinite(Number(payload.processCpuPercent))
+      ? `${Number(payload.processCpuPercent).toFixed(1)}%`
+      : '—';
+    const rss = Number.isFinite(Number(payload.processRssMB))
+      ? `${Number(payload.processRssMB).toFixed(0)} MB`
+      : '—';
+
+    state.backendMarkerText =
+      `Backend: ${host}:${port} | instancja: ${instanceId} | PID: ${pid} | start: ${startedAt} | ` +
+      `CPU: ${cpuTotal} | App CPU: ${cpuProcess} | RAM: ${rss}`;
+  } catch (_error) {
+    state.backendMarkerText = 'Backend: niedostępny';
+  }
+  if (elements.backendMarker) {
+    elements.backendMarker.textContent = state.backendMarkerText;
+  }
+}
+
+function formatIsoDateTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('pl-PL');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function escapeHtmlAttr(value) {
+  return escapeHtml(value).replaceAll('`', '');
+}
+
+function basename(filePath) {
+  const normalized = String(filePath || '').replaceAll('/', '\\');
+  const idx = normalized.lastIndexOf('\\');
+  return idx === -1 ? normalized : normalized.slice(idx + 1);
+}
+
+function dirname(filePath) {
+  const normalized = String(filePath || '').replaceAll('/', '\\');
+  const idx = normalized.lastIndexOf('\\');
+  return idx === -1 ? '' : normalized.slice(0, idx);
+}
+
+function extname(filePath) {
+  const name = basename(filePath).toLowerCase();
+  const idx = name.lastIndexOf('.');
+  return idx === -1 ? '' : name.slice(idx);
+}
+
+function resolveDroppedPath(file) {
+  const directPath = String(file?.path || '').trim();
+  if (directPath) {
+    return directPath;
+  }
+
+  const resolver = window.electronAPI?.resolveDroppedFilePath;
+  if (typeof resolver === 'function') {
+    try {
+      return String(resolver(file) || '').trim();
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+function extractDroppedPathsFromDataTransfer(dataTransfer) {
+  if (!dataTransfer || typeof dataTransfer.getData !== 'function') {
+    return [];
+  }
+
+  const results = [];
+  const seen = new Set();
+  const addPath = (candidate) => {
+    const normalized = String(candidate || '').trim();
+    if (!normalized) {
+      return;
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    results.push(normalized);
+  };
+
+  const parseTextPayload = (payload) => {
+    if (!payload) {
+      return;
+    }
+
+    String(payload)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .forEach((line) => {
+        const fileUriPath = parseFileUriToWindowsPath(line);
+        if (fileUriPath) {
+          addPath(fileUriPath);
+          return;
+        }
+
+        if (/^[A-Za-z]:\\/.test(line)) {
+          addPath(line);
+        }
+      });
+  };
+
+  parseTextPayload(dataTransfer.getData('text/uri-list'));
+  parseTextPayload(dataTransfer.getData('text/plain'));
+  return results;
+}
+
+function parseFileUriToWindowsPath(value) {
+  const raw = String(value || '').trim();
+  if (!raw.toLowerCase().startsWith('file://')) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'file:') {
+      return '';
+    }
+
+    const decodedPath = decodeURIComponent(parsed.pathname || '');
+    if (!decodedPath) {
+      return '';
+    }
+
+    const windowsPath = /^\/[A-Za-z]:/.test(decodedPath)
+      ? decodedPath.slice(1)
+      : decodedPath;
+
+    return windowsPath.replaceAll('/', '\\');
+  } catch (_error) {
+    return '';
+  }
+}
+
+function setupSettingsTabs() {
+  if (!settingsTabButtons.length || !settingsTabPanels.length) {
+    return;
+  }
+
+  const activateTab = (tabName) => {
+    settingsTabButtons.forEach((button) => {
+      const isActive = button.dataset.settingsTab === tabName;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    settingsTabPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.settingsPanel !== tabName;
+    });
+  };
+
+  settingsTabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      activateTab(button.dataset.settingsTab);
+    });
+  });
+
+  activateTab(settingsTabButtons[0].dataset.settingsTab);
+}
+
+function setupThemeToggle() {
+  let initialTheme = 'light';
+  try {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      initialTheme = savedTheme;
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      initialTheme = 'dark';
+    }
+  } catch (_error) {
+    initialTheme = 'light';
+  }
+
+  applyTheme(initialTheme);
+
+  if (!elements.themeToggle) {
+    return;
+  }
+
+  elements.themeToggle.addEventListener('click', () => {
+    const currentTheme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(nextTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch (_error) {
+      // Ignore storage errors; theme still changes for the current session.
+    }
+  });
+}
+
+function applyTheme(theme) {
+  const normalizedTheme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = normalizedTheme;
+  if (elements.themeToggle) {
+    elements.themeToggle.textContent = normalizedTheme === 'dark' ? 'Motyw: Ciemny' : 'Motyw: Jasny';
+    elements.themeToggle.setAttribute('aria-pressed', normalizedTheme === 'dark' ? 'true' : 'false');
+  }
+}

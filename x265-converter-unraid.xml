@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>x265 Converter</Name>
+  <Repository>x265-converter:latest</Repository>
+  <Registry></Registry>
+  <Network>bridge</Network>
+  <MyIP></MyIP>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/</Support>
+  <Project>https://github.com/</Project>
+  <Overview>🎬 Webowy konwerter video do HEVC/x265 z interfejsem webowym. Kolejka pracy, podgląd live, turbo-mode. Konwersja działa bezpośrednio na maszynie Unraid przy użyciu ffmpeg.</Overview>
+  <Category>Video</Category>
+  <WebUI>http://[IP]:[PORT:3001]/</WebUI>
+  <TemplateURL></TemplateURL>
+  <Icon></Icon>
+  <ExtraParams></ExtraParams>
+  <DateInstalled></DateInstalled>
+  <DonateText></DonateText>
+  <DonateLink></DonateLink>
+  
+  <!-- PORTY -->
+  <Config Name="Web UI Port" Target="3001" Default="3001" Mode="tcp" Description="Port interfejsu webowego" Type="Port" Display="always" Required="true" Mask="false">3001</Config>
+  
+  <!-- FOLDERY / VOLUME -->
+  <Config Name="Media Folder" Target="/data" Default="/mnt/user/media" Mode="rw" Description="Folder ze źródłowymi plikami video i wynikami konwersji" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  
+  <Config Name="Temp Folder" Target="/tmp/x265-converter" Default="/mnt/user/appdata/x265-converter/tmp" Mode="rw" Description="Folder roboczy - cache, pliki tymczasowe" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/x265-converter/tmp</Config>
+  
+  <Config Name="Downloads Folder (Optional)" Target="/downloads" Default="/mnt/user/downloads" Mode="rw" Description="[OPCJONALNE] Alternatywny folder na wyniki konwersji" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/downloads</Config>
+  
+  <!-- ZMIENNE ŚRODOWISKA -->
+  <Config Name="NODE_ENV" Target="NODE_ENV" Default="production" Mode="" Description="Tryb działania Node.js" Type="Variable" Display="advanced" Required="true" Mask="false">production</Config>
+  
+  <Config Name="HOST" Target="HOST" Default="0.0.0.0" Mode="" Description="Adres nasłuchiwania backendu (0.0.0.0 = dostępne sieciowo)" Type="Variable" Display="advanced" Required="true" Mask="false">0.0.0.0</Config>
+  
+  <Config Name="PORT" Target="PORT" Default="3001" Mode="" Description="Port backendu Node.js" Type="Variable" Display="advanced" Required="true" Mask="false">3001</Config>
+  
+  <Config Name="PUBLIC_URL" Target="PUBLIC_URL" Default="http://[IP]:3001" Mode="" Description="URL dostępu z przeglądarki (wstaw IP Unraid lub domenę)" Type="Variable" Display="advanced" Required="true" Mask="false">http://[IP]:3001</Config>
+  
+  <Config Name="AUTO_OPEN_BROWSER" Target="AUTO_OPEN_BROWSER" Default="0" Mode="" Description="Otwieranie przeglądarki (0 = nie otwieraj)" Type="Variable" Display="advanced" Required="true" Mask="false">0</Config>
+  
+  <Config Name="FILE_OPEN_ENABLED" Target="FILE_OPEN_ENABLED" Default="0" Mode="" Description="Otwieranie plików z backendu (0 = wyłącz)" Type="Variable" Display="advanced" Required="true" Mask="false">0</Config>
+  
+  <Config Name="APP_TMP_DIR" Target="APP_TMP_DIR" Default="/tmp/x265-converter" Mode="" Description="Ścieżka do katalogu tymczasowego wewnątrz kontenera" Type="Variable" Display="advanced" Required="true" Mask="false">/tmp/x265-converter</Config>
+  
+  <!-- CPU CORES (opcjonalnie) -->
+  <Config Name="CPU Cores (--cpus)" Target="cpus" Default="" Mode="" Description="[OPCJONALNE] Liczba rdzeni CPU do użycia (np. 4 lub 2.5)" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  
+  <Config Name="Memory Limit (--memory)" Target="memory" Default="" Mode="" Description="[OPCJONALNE] Limit pamięci RAM (np. 2G, 4G)" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  
+</Container>

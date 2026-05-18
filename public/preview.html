@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Podglad x265</title>
+    <link rel="stylesheet" href="/preview.css">
+  </head>
+  <body id="previewBody">
+    <main class="preview-shell">
+      <header class="topbar card">
+        <div>
+          <p class="eyebrow">x265 Preview</p>
+          <h1 id="fileTitle">Podglad pliku</h1>
+          <p id="metaText" class="muted">Ladowanie metadanych...</p>
+          <p id="backendMarker" class="muted">Backend: sprawdzanie...</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="closeBtn" class="ghost">Zamknij</button>
+        </div>
+      </header>
+
+      <section class="card controls">
+        <div class="control-grid">
+          <label>
+            Dlugosc probki
+            <select id="clipDuration">
+              <option value="30" selected>30 s</option>
+              <option value="60">60 s</option>
+            </select>
+          </label>
+          <label>
+            Przygotowanie oryginalu
+            <select id="prepMode">
+              <option value="quick" selected>Szybki start podgladu</option>
+              <option value="accurate">Maksymalna zgodnosc 1:1 (wolniej)</option>
+            </select>
+          </label>
+          <label>
+            Profil jakosci
+            <select id="previewQualityPreset">
+              <option value="quality" selected>Jakosc</option>
+              <option value="balanced">Balans</option>
+              <option value="speed">Szybkosc</option>
+            </select>
+          </label>
+          <label>
+            Skala podgladu
+            <select id="zoomScale">
+              <option value="1" selected>1:1</option>
+              <option value="0.5">1:2</option>
+              <option value="0.25">1:4</option>
+            </select>
+          </label>
+          <div class="actions-cell">
+            <button id="generateBtn" class="primary">Generuj podglad (1:1 z profilem)</button>
+          </div>
+        </div>
+
+        <div class="target-size-row">
+          <label for="previewTargetPercent">Docelowy rozmiar: <span id="targetSizeHint">55%</span> rozmiaru pliku</label>
+          <input id="previewTargetPercent" type="range" min="20" max="95" step="1" value="55">
+        </div>
+
+        <div class="frame-preview-row">
+          <div class="frame-preview-head">
+            <strong>Podglad klatki dla aktualnej pozycji suwaka</strong>
+            <span id="framePreviewTime" class="muted">Czas: 00:00</span>
+          </div>
+          <div class="frame-preview-shell">
+            <img id="framePreviewImage" alt="Podglad klatki" />
+          </div>
+        </div>
+
+        <div class="timeline-row">
+          <label for="startSlider">Fragment z pelnego video</label>
+          <input id="startSlider" type="range" min="0" max="0" step="0.1" value="0">
+          <div class="timeline-meta">
+            <span id="startValue">Start: 00:00</span>
+            <span id="endValue">Koniec: 01:00</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card progress-card" id="progressCard">
+        <div class="progress-head">
+          <strong id="progressLabel">Gotowe do generowania.</strong>
+          <span id="progressValue">0%</span>
+        </div>
+        <p id="stageDetail" class="muted">Etap: oczekiwanie</p>
+        <div class="bar-shell">
+          <div id="progressBar" class="bar-fill" style="width:0%"></div>
+        </div>
+      </section>
+
+      <section class="card compare-card">
+        <div class="compare-toolbar">
+          <div class="legend">
+            <span><b>Audio:</b> tylko oryginal</span>
+            <span><b>Lewa:</b> plik zrodlowy</span>
+            <span><b>Prawa:</b> plik docelowy</span>
+          </div>
+        </div>
+
+        <div class="stage-wrap">
+          <div id="stage" class="stage">
+            <div class="compare-side-info compare-side-left" aria-hidden="true">
+              <span id="sourceHintText" class="compare-side-text">Plik zrodlowy</span>
+            </div>
+            <div class="compare-side-info compare-side-right" aria-hidden="true">
+              <span id="encodedHintText" class="compare-side-text">Plik docelowy</span>
+            </div>
+            <video id="videoOriginal" class="video-base" controls controlsList="nofullscreen" playsinline preload="metadata"></video>
+            <video id="videoEncoded" class="video-overlay" muted playsinline preload="metadata"></video>
+            <div id="divider" class="divider" aria-label="Linia podzialu oryginal i po konwersji"></div>
+          </div>
+          <button id="stageFullscreenBtn" class="stage-fullscreen-btn" title="Pełny ekran">⛶</button>
+        </div>
+      </section>
+
+      <p id="errorText" class="error-text"></p>
+    </main>
+
+    <script src="/preview.js"></script>
+  </body>
+</html>
