@@ -20,54 +20,62 @@ function New-VideoClapperIcon {
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
 
-    # Transparent canvas then rounded blue app tile.
+    # Transparent canvas with film clapper icon (gray style).
     $g.Clear([System.Drawing.Color]::Transparent)
-    $tileRect = New-Object System.Drawing.Rectangle(34, 26, 188, 206)
-    $tileRadius = 38
-    $tilePath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $tilePath.AddArc($tileRect.X, $tileRect.Y, $tileRadius * 2, $tileRadius * 2, 180, 90)
-    $tilePath.AddArc($tileRect.Right - ($tileRadius * 2), $tileRect.Y, $tileRadius * 2, $tileRadius * 2, 270, 90)
-    $tilePath.AddArc($tileRect.Right - ($tileRadius * 2), $tileRect.Bottom - ($tileRadius * 2), $tileRadius * 2, $tileRadius * 2, 0, 90)
-    $tilePath.AddArc($tileRect.X, $tileRect.Bottom - ($tileRadius * 2), $tileRadius * 2, $tileRadius * 2, 90, 90)
-    $tilePath.CloseFigure()
 
-    $bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        $tileRect,
-        [System.Drawing.Color]::FromArgb(255, 79, 133, 237),
-        [System.Drawing.Color]::FromArgb(255, 98, 154, 245),
-        45
+    $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(90, 0, 0, 0))
+    $g.FillEllipse($shadowBrush, 46, 214, 164, 22)
+
+    $bodyRect = New-Object System.Drawing.Rectangle(48, 108, 162, 102)
+    $bodyBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        $bodyRect,
+        [System.Drawing.Color]::FromArgb(255, 110, 114, 122),
+        [System.Drawing.Color]::FromArgb(255, 62, 66, 74),
+        90
     )
-    $g.FillPath($bgBrush, $tilePath)
+    $g.FillRectangle($bodyBrush, $bodyRect)
 
-    $whitePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(245, 255, 255, 255), 8)
-    $whitePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $whitePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $whitePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $bodyBorderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 30, 33, 38), 3)
+    $g.DrawRectangle($bodyBorderPen, $bodyRect)
 
-    # Play bubble at top.
-    $bubblePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(245, 255, 255, 255), 6)
-    $g.DrawEllipse($bubblePen, 112, 44, 32, 32)
-    $triangle = @(
-        (New-Object System.Drawing.Point(123, 53)),
-        (New-Object System.Drawing.Point(123, 67)),
-        (New-Object System.Drawing.Point(134, 60))
+    $hingeBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(235, 150, 153, 160))
+    $g.FillEllipse($hingeBrush, 58, 118, 16, 16)
+
+    # Top clapper slate.
+    $topPts = @(
+        (New-Object System.Drawing.Point(36, 96)),
+        (New-Object System.Drawing.Point(192, 66)),
+        (New-Object System.Drawing.Point(214, 98)),
+        (New-Object System.Drawing.Point(58, 128))
     )
-    $triangleBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(245, 255, 255, 255))
-    $g.FillPolygon($triangleBrush, $triangle)
+    $topBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 52, 55, 62))
+    $g.FillPolygon($topBrush, $topPts)
 
-    # Dotted center guide.
-    $dotBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(220, 255, 255, 255))
-    foreach ($y in 84, 96, 108, 120, 132) {
-        $g.FillEllipse($dotBrush, 126, $y, 4, 4)
-    }
+    $topBorderPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(210, 20, 22, 27), 3)
+    $g.DrawPolygon($topBorderPen, $topPts)
 
-    # Scissors handles.
-    $g.DrawEllipse($whitePen, 90, 158, 20, 20)
-    $g.DrawEllipse($whitePen, 146, 158, 20, 20)
+    # White stripes on top slate.
+    $stripePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(238, 240, 240, 240), 8)
+    $stripePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $stripePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $g.DrawLine($stripePen, 58, 120, 84, 80)
+    $g.DrawLine($stripePen, 92, 113, 118, 73)
+    $g.DrawLine($stripePen, 126, 106, 152, 66)
+    $g.DrawLine($stripePen, 160, 99, 186, 59)
 
-    # Scissors blades.
-    $g.DrawLine($whitePen, 104, 168, 142, 118)
-    $g.DrawLine($whitePen, 152, 168, 114, 118)
+    # Chalk-like scribbles.
+    $chalkPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(220, 245, 245, 245), 4)
+    $chalkPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $chalkPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $g.DrawLine($chalkPen, 72, 156, 118, 148)
+    $g.DrawLine($chalkPen, 72, 168, 106, 161)
+    $g.DrawLine($chalkPen, 72, 180, 126, 172)
+    $g.DrawLine($chalkPen, 136, 178, 170, 171)
+
+    # Guide lines.
+    $linePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(105, 235, 235, 235), 2)
+    $g.DrawLine($linePen, 64, 142, 194, 142)
+    $g.DrawLine($linePen, 64, 192, 194, 192)
 
     if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
@@ -82,12 +90,15 @@ function New-VideoClapperIcon {
         $icon.Dispose()
         $g.Dispose()
         $bmp.Dispose()
-        $bgBrush.Dispose()
-        $tilePath.Dispose()
-        $whitePen.Dispose()
-        $bubblePen.Dispose()
-        $triangleBrush.Dispose()
-        $dotBrush.Dispose()
+        $shadowBrush.Dispose()
+        $bodyBrush.Dispose()
+        $bodyBorderPen.Dispose()
+        $hingeBrush.Dispose()
+        $topBrush.Dispose()
+        $topBorderPen.Dispose()
+        $stripePen.Dispose()
+        $chalkPen.Dispose()
+        $linePen.Dispose()
     }
 }
 
