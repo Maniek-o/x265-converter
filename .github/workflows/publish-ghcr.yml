@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'server.js'
+      - 'electron-main.js'
+      - 'preload.js'
+      - 'public/**'
+      - '.dockerignore'
+      - '.github/workflows/publish-ghcr.yml'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -49,3 +59,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
