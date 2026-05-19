@@ -102,6 +102,11 @@ elements.presetDialog?.addEventListener('click', (event) => {
     closePresetDialog();
   }
 });
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && elements.presetDialog && !elements.presetDialog.hidden) {
+    closePresetDialog();
+  }
+});
 elements.presetListSelect?.addEventListener('change', syncPresetDialogSelection);
 elements.presetSaveBtn?.addEventListener('click', savePresetFromDialog);
 elements.presetUpdateBtn?.addEventListener('click', updatePresetFromDialog);
@@ -160,6 +165,7 @@ initializeRuntimeMode();
 applyTheme('dark');
 initializeCollapsibleSections();
 loadPresets();
+closePresetDialog();
 
 setInterval(() => {
   void refreshJobs();

@@ -1022,6 +1022,10 @@ html[data-theme="dark"] .is-current-job td {
   background: rgba(0, 0, 0, 0.7);
 }
 
+.preset-dialog-backdrop[hidden] {
+  display: none !important;
+}
+
 .preset-dialog {
   width: min(760px, 100%);
   border: 1px solid var(--line);
@@ -1082,6 +1086,12 @@ html[data-theme="dark"] .preset-dialog-backdrop {
 html[data-theme="dark"] #presetListSelect,
 html[data-theme="dark"] #presetNameInput {
   background: #0f141b;
+}
+
+html[data-theme="dark"] .primary {
+  background: linear-gradient(180deg, #2a3f63 0%, #1f334f 100%);
+  border-color: #4f76ab;
+  color: #eaf2ff;
 }
 
 @media (max-width: 760px) {
