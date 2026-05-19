@@ -1091,25 +1091,21 @@ function isVideoInputError(error) {
 function normalizeSettings(input) {
   const encoder = input.encoder === 'gpu' ? 'gpu' : 'cpu';
   const targetPercent = clampNumber(Number(input.targetPercent), 20, 95, 55);
-  const cpuLimitPercent = clampNumber(Number(input.cpuLimitPercent), 30, 100, 90);
   const qualityPreset = normalizeQualityPreset(input.qualityPreset);
   const audioCodec = input.audioCodec === 'copy' ? 'copy' : 'opus';
   const audioBitrateKbps = clampNumber(Number(input.audioBitrateKbps), 32, 320, 96);
   const testClipEnabled = Boolean(input.testClipEnabled);
   const smartQuality = Boolean(input.smartQuality);
-  const turboMode = Boolean(input.turboMode);
   const fpsMode = input.fpsMode === '24' ? '24' : 'source';
 
   return {
     encoder,
     targetPercent,
-    cpuLimitPercent,
     qualityPreset,
     audioCodec,
     audioBitrateKbps,
     testClipEnabled,
     smartQuality,
-    turboMode,
     fpsMode
   };
 }
@@ -1120,7 +1116,7 @@ function normalizePreviewPrepMode(value) {
 }
 
 function normalizeQualityPreset(value) {
-  if (value === 'speed' || value === 'quality') {
+  if (value === 'speed' || value === 'balanced' || value === 'quality') {
     return value;
   }
   return 'quality';
@@ -1535,10 +1531,7 @@ function buildFfmpegArgs(job) {
   const { sourceFile, outputPath, settings, metrics, probe } = job;
   const duration = Math.max(1, metrics.sourceDurationSeconds || metrics.durationSeconds || 1);
   const cores = Math.max(1, (os.cpus() || []).length || 1);
-  const turboEnabled = Boolean(settings.turboMode);
-  const threadLimit = turboEnabled
-    ? cores
-    : computeThreadLimitFromPercent(settings.cpuLimitPercent);
+  const threadLimit = cores;
   const videoStream = (probe?.streams || []).find((stream) => stream.codec_type === 'video');
   const audioStream = (probe?.streams || []).find((stream) => stream.codec_type === 'audio');
 
@@ -1624,7 +1617,7 @@ function buildFfmpegArgs(job) {
   // Smart Quality (CRF mode) vs standard bitrate mode
   if (job.suggestedQuality) {
     const sq = job.suggestedQuality;
-    const cpuPreset = turboEnabled ? 'ultrafast' : (presetMap.cpu[sq.preset] || 'medium');
+    const cpuPreset = presetMap.cpu[sq.preset] || 'medium';
     const gpuPreset = presetMap.gpu[sq.preset] || 'p4';
     const effectiveAudioKbps = sq.audioBitrateKbps || settings.audioBitrateKbps;
 
@@ -1636,9 +1629,7 @@ function buildFfmpegArgs(job) {
         '-qp', String(sq.crf)
       );
     } else {
-      const frameThreads = turboEnabled
-        ? Math.min(6, Math.max(3, Math.floor(threadLimit / 6)))
-        : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
+      const frameThreads = Math.min(6, Math.max(3, Math.floor(threadLimit / 6)));
       const x265Params = `frame-threads=${frameThreads}:threads=${threadLimit}:wpp=1:pmode=1:pme=1`;
       args.push(
         '-c:v', 'libx265',
@@ -1665,10 +1656,8 @@ function buildFfmpegArgs(job) {
         '-bufsize', String(Math.round(videoBitrate * 2))
       );
     } else {
-      const frameThreads = turboEnabled
-        ? Math.min(6, Math.max(3, Math.floor(threadLimit / 6)))
-        : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
-      const cpuPreset = turboEnabled ? 'ultrafast' : presetMap.cpu[settings.qualityPreset];
+      const frameThreads = Math.min(6, Math.max(3, Math.floor(threadLimit / 6)));
+      const cpuPreset = presetMap.cpu[settings.qualityPreset];
       const x265Params = `frame-threads=${frameThreads}:threads=${threadLimit}:wpp=1:pmode=1:pme=1`;
       args.push(
         '-c:v', 'libx265',
@@ -1874,7 +1863,7 @@ function encodeSampleAndScore(job, options) {
     const output = String(options.output || '');
 
     const isGpu = job.settings?.encoder === 'gpu';
-    const threadLimit = computeThreadLimitFromPercent(job.settings?.cpuLimitPercent);
+    const threadLimit = computeThreadLimit();
     const qualityPreset = job.settings?.qualityPreset || 'quality';
     const cpuPreset = PRESET_MAP.cpu[qualityPreset] || 'medium';
     const gpuPreset = PRESET_MAP.gpu[qualityPreset] || 'p4';
@@ -1966,11 +1955,9 @@ function measureSsim(sourceFile, encodedFile, start, duration) {
   });
 }
 
-function computeThreadLimitFromPercent(cpuLimitPercent) {
+function computeThreadLimit() {
   const cores = Math.max(1, (os.cpus() || []).length || 1);
-  const percent = clampNumber(Number(cpuLimitPercent), 30, 100, 90);
-  const computed = Math.round((cores * percent) / 100);
-  return Math.max(1, Math.min(cores, computed));
+  return cores;
 }
 
 function readCpuTimesSnapshot() {

@@ -26,8 +26,7 @@ const state = {
     audioCodec: 'opus',
     audioBitrateKbps: 96,
     testClipEnabled: false,
-    smartQuality: false,
-    turboMode: false
+    smartQuality: false
   }
 };
 
@@ -53,7 +52,6 @@ const elements = {
   audioCodec: document.querySelector('#audioCodec'),
   audioBitrate: document.querySelector('#audioBitrate'),
   testClipEnabled: document.querySelector('#testClipEnabled'),
-  turboModeEnabled: document.querySelector('#turboModeEnabled'),
   smartQualityEnabled: document.querySelector('#smartQualityEnabled'),
   smartQualityHint: document.querySelector('#smartQualityHint'),
   settingsHeaderTitle: document.querySelector('#settingsHeaderTitle'),
@@ -139,10 +137,6 @@ elements.fpsMode?.addEventListener('change', (event) => {
 });
 elements.testClipEnabled?.addEventListener('change', (event) => {
   state.settings.testClipEnabled = event.target.checked;
-});
-elements.turboModeEnabled?.addEventListener('change', (event) => {
-  state.settings.turboMode = event.target.checked;
-  updatePresetChip();
 });
 elements.smartQualityEnabled?.addEventListener('change', async (event) => {
   state.settings.smartQuality = event.target.checked;
@@ -1320,8 +1314,7 @@ function settingsSnapshot() {
     audioCodec: state.settings.audioCodec,
     audioBitrateKbps: state.settings.audioBitrateKbps,
     testClipEnabled: state.settings.testClipEnabled,
-    smartQuality: state.settings.smartQuality,
-    turboMode: state.settings.turboMode
+    smartQuality: state.settings.smartQuality
   };
 }
 
@@ -1338,7 +1331,6 @@ function applySettingsToUi() {
   if (elements.audioCodec) elements.audioCodec.value = state.settings.audioCodec;
   if (elements.audioBitrate) elements.audioBitrate.value = String(state.settings.audioBitrateKbps);
   if (elements.testClipEnabled) elements.testClipEnabled.checked = Boolean(state.settings.testClipEnabled);
-  if (elements.turboModeEnabled) elements.turboModeEnabled.checked = Boolean(state.settings.turboMode);
   if (elements.smartQualityEnabled) elements.smartQualityEnabled.checked = Boolean(state.settings.smartQuality);
   updatePresetChip();
   void refreshSmartQualityHint();

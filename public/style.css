@@ -1008,10 +1008,6 @@ html[data-theme="dark"] .is-current-job td {
   }
 }
 
-/* Turbo mode toggle */
-.turbo-toggle { color: var(--accent, #e07b00); font-weight: 600; }
-.turbo-toggle input:checked + span { color: var(--accent, #e07b00); }
-
 .preset-dialog-backdrop {
   position: fixed;
   inset: 0;
