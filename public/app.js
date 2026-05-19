@@ -755,8 +755,12 @@ function renderJobs() {
   renderOverallProgress(summary.overallProgressPercent || 0);
   renderCurrentJobSummary(summary);
 
+  const totalJobs = state.jobs.length;
+  const convertedJobs = Number(summary.completed || 0);
+  const convertedPct = totalJobs > 0 ? (convertedJobs / totalJobs) * 100 : 0;
+
   elements.queueStats.textContent =
-    `Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte HEVC: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
+    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte HEVC: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
 
   elements.jobsList.classList.remove('empty-state');
   elements.jobsList.innerHTML = `
@@ -874,13 +878,12 @@ function renderCurrentJobSummary(summary) {
 
 function ensureActiveJobVisible() {
   const activeRow = elements.jobsList.querySelector('tr.queue-row.status-processing');
+  elements.jobsList.querySelectorAll('tr.queue-row').forEach((row) => row.classList.remove('is-current-job'));
   if (!activeRow) {
     return;
   }
 
-  elements.jobsList.querySelectorAll('tr.queue-row').forEach((row) => row.classList.remove('is-current-job'));
   activeRow.classList.add('is-current-job');
-  activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function setupTopNav() {

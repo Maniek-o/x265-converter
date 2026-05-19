@@ -31,10 +31,13 @@
           <div class="file-list-header">
             <h3>Pliki do kolejki</h3>
             <div class="inline-actions">
-              <button id="toggleFilesSectionBtn" class="ghost" type="button">Rozwiń</button>
               <button id="clearFilesBtn" class="ghost">Wyczyść pliki do kolejki</button>
               <button id="toggleSelectionBtn" class="ghost">Zaznacz wszystko</button>
             </div>
+          </div>
+
+          <div class="collapse-toggle-row">
+            <button id="toggleFilesSectionBtn" class="ghost" type="button">Rozwiń</button>
           </div>
 
           <div id="filesListWrap" class="collapsible">
@@ -131,9 +134,10 @@
       <section id="queueSection" class="panel queue-panel">
         <div class="queue-header">
           <h2>Kolejka</h2>
-          <div class="queue-header-actions">
-            <button id="toggleQueueSectionBtn" class="ghost" type="button">Rozwiń</button>
-          </div>
+        </div>
+
+        <div class="collapse-toggle-row">
+          <button id="toggleQueueSectionBtn" class="ghost" type="button">Rozwiń</button>
         </div>
 
         <div id="currentJobSummary" class="current-job-summary muted compact">Brak aktywnie konwertowanego pliku.</div>

@@ -950,6 +950,12 @@ button:disabled {
   gap: 6px;
 }
 
+.collapse-toggle-row {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-start;
+}
+
 .current-job-summary {
   margin-top: 7px;
   padding: 6px 8px;
@@ -961,6 +967,25 @@ button:disabled {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   background: #eef5ff;
+}
+
+html[data-theme="dark"] .backend-status-card {
+  background: #0f141b;
+  border-color: #2c3643;
+}
+
+html[data-theme="dark"] .cpu-mini-chart {
+  background: #0b1016;
+  border-color: #2c3643;
+}
+
+html[data-theme="dark"] .current-job-summary {
+  background: #101722;
+  border-color: #2c3643;
+}
+
+html[data-theme="dark"] .is-current-job td {
+  background: #132033;
 }
 
 #queueControls[hidden] {

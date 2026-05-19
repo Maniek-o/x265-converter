@@ -1408,9 +1408,7 @@ function ffprobe(sourceFile) {
 
 async function runNextJob() {
   const processing = queueState.jobs.filter((job) => job.status === 'processing');
-  const turboEnabled = queueState.jobs.some((job) => job.settings?.turboMode);
-  const cores = Math.max(1, (os.cpus() || []).length || 1);
-  const concurrencyLimit = turboEnabled ? computeTurboConcurrency(cores) : 1;
+  const concurrencyLimit = 1;
 
   if (processing.length >= concurrencyLimit) {
     return;
@@ -1538,11 +1536,8 @@ function buildFfmpegArgs(job) {
   const duration = Math.max(1, metrics.sourceDurationSeconds || metrics.durationSeconds || 1);
   const cores = Math.max(1, (os.cpus() || []).length || 1);
   const turboEnabled = Boolean(settings.turboMode);
-  // Turbo uses full CPU for one job and only splits cores when there are actually
-  // multiple active/queued turbo jobs competing for the machine.
-  const turboConcurrency = turboEnabled ? computeTurboWorkload(job, cores) : 1;
   const threadLimit = turboEnabled
-    ? Math.max(1, Math.floor(cores / turboConcurrency))
+    ? cores
     : computeThreadLimitFromPercent(settings.cpuLimitPercent);
   const videoStream = (probe?.streams || []).find((stream) => stream.codec_type === 'video');
   const audioStream = (probe?.streams || []).find((stream) => stream.codec_type === 'audio');
@@ -1629,7 +1624,7 @@ function buildFfmpegArgs(job) {
   // Smart Quality (CRF mode) vs standard bitrate mode
   if (job.suggestedQuality) {
     const sq = job.suggestedQuality;
-    const cpuPreset = presetMap.cpu[sq.preset] || 'medium';
+    const cpuPreset = turboEnabled ? 'ultrafast' : (presetMap.cpu[sq.preset] || 'medium');
     const gpuPreset = presetMap.gpu[sq.preset] || 'p4';
     const effectiveAudioKbps = sq.audioBitrateKbps || settings.audioBitrateKbps;
 
@@ -1641,10 +1636,10 @@ function buildFfmpegArgs(job) {
         '-qp', String(sq.crf)
       );
     } else {
-      // Normal: frame-threads=4 + WPP + pmode + pme for best multi-core saturation
-      // Turbo: frame-threads=2 (more jobs in flight) + same parallelism flags
-      const frameThreads = turboEnabled ? 2 : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
-      const x265Params = `frame-threads=${frameThreads}:pools=${threadLimit}:wpp=1:pmode=1:pme=1`;
+      const frameThreads = turboEnabled
+        ? Math.min(6, Math.max(3, Math.floor(threadLimit / 6)))
+        : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
+      const x265Params = `frame-threads=${frameThreads}:threads=${threadLimit}:wpp=1:pmode=1:pme=1`;
       args.push(
         '-c:v', 'libx265',
         '-preset', cpuPreset,
@@ -1670,13 +1665,14 @@ function buildFfmpegArgs(job) {
         '-bufsize', String(Math.round(videoBitrate * 2))
       );
     } else {
-      // Normal: frame-threads=4 + WPP + pmode + pme for best multi-core saturation
-      // Turbo: frame-threads=2 (more jobs in flight) + same parallelism flags
-      const frameThreads = turboEnabled ? 2 : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
-      const x265Params = `frame-threads=${frameThreads}:pools=${threadLimit}:wpp=1:pmode=1:pme=1`;
+      const frameThreads = turboEnabled
+        ? Math.min(6, Math.max(3, Math.floor(threadLimit / 6)))
+        : Math.min(4, Math.max(2, Math.floor(threadLimit / 6)));
+      const cpuPreset = turboEnabled ? 'ultrafast' : presetMap.cpu[settings.qualityPreset];
+      const x265Params = `frame-threads=${frameThreads}:threads=${threadLimit}:wpp=1:pmode=1:pme=1`;
       args.push(
         '-c:v', 'libx265',
-        '-preset', presetMap.cpu[settings.qualityPreset],
+        '-preset', cpuPreset,
         '-b:v', String(videoBitrate),
         '-maxrate', String(Math.round(videoBitrate * 1.25)),
         '-bufsize', String(Math.max(60_000, Math.round(videoBitrate * 2))),
@@ -1975,32 +1971,6 @@ function computeThreadLimitFromPercent(cpuLimitPercent) {
   const percent = clampNumber(Number(cpuLimitPercent), 30, 100, 90);
   const computed = Math.round((cores * percent) / 100);
   return Math.max(1, Math.min(cores, computed));
-}
-
-// Auto-sizes number of parallel jobs for turbo mode based on logical CPU count:
-//  < 12 threads  → 2 jobs
-//  12-23 threads → 2 jobs
-//  24+ threads   → 3 jobs (i9-14900K: 32 threads → 3 × ~10 threads = ~100% CPU)
-function computeTurboConcurrency(cores) {
-  if (cores >= 24) return 3;
-  return 2;
-}
-
-function computeTurboWorkload(job, cores) {
-  const maxTurboConcurrency = computeTurboConcurrency(cores);
-  const turboJobsInFlight = queueState.jobs.filter((item) => {
-    if (item.id === job.id) {
-      return true;
-    }
-
-    if (!item.settings?.turboMode) {
-      return false;
-    }
-
-    return item.status === 'queued' || item.status === 'processing' || item.status === 'preparing';
-  }).length;
-
-  return Math.max(1, Math.min(maxTurboConcurrency, turboJobsInFlight || 1));
 }
 
 function readCpuTimesSnapshot() {
