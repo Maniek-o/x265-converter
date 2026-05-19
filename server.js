@@ -1629,12 +1629,10 @@ function buildFfmpegArgs(job) {
         '-qp', String(sq.crf)
       );
     } else {
-      const x265Params = buildX265Params(threadLimit, sq.preset);
       args.push(
         '-c:v', 'libx265',
         '-preset', cpuPreset,
         '-crf', String(sq.crf),
-        '-x265-params', x265Params,
         '-tag:v', 'hvc1'
       );
     }
@@ -1656,14 +1654,12 @@ function buildFfmpegArgs(job) {
       );
     } else {
       const cpuPreset = presetMap.cpu[settings.qualityPreset];
-      const x265Params = buildX265Params(threadLimit, settings.qualityPreset);
       args.push(
         '-c:v', 'libx265',
         '-preset', cpuPreset,
         '-b:v', String(videoBitrate),
         '-maxrate', String(Math.round(videoBitrate * 1.25)),
         '-bufsize', String(Math.max(60_000, Math.round(videoBitrate * 2))),
-        '-x265-params', x265Params,
         '-tag:v', 'hvc1'
       );
     }
@@ -1956,18 +1952,6 @@ function measureSsim(sourceFile, encodedFile, start, duration) {
 function computeThreadLimit() {
   const cores = Math.max(1, (os.cpus() || []).length || 1);
   return cores;
-}
-
-function buildX265Params(threadLimit, qualityPreset) {
-  const threads = Math.max(1, Number(threadLimit) || 1);
-  const preset = normalizeQualityPreset(qualityPreset);
-
-  // Let high-core CPUs scale better. Previous cap (max 6) flattened i9 vs i7 differences.
-  const frameThreads = Math.max(4, Math.min(16, Math.ceil(threads / 2)));
-  const pme = preset === 'quality' ? 1 : 0;
-  const lookaheadSlices = preset === 'speed' ? 4 : 8;
-
-  return `frame-threads=${frameThreads}:threads=${threads}:wpp=1:pmode=1:pme=${pme}:lookahead-slices=${lookaheadSlices}`;
 }
 
 function readCpuTimesSnapshot() {
