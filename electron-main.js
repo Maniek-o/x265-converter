@@ -161,6 +161,76 @@ function killServer() {
 // Window
 // ---------------------------------------------------------------------------
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function buildLoadErrorPage(appUrl, errorDescription) {
+  const safeUrl = escapeHtml(appUrl);
+  const safeError = escapeHtml(errorDescription || 'Nieznany błąd połączenia');
+
+  return `<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>x265 Converter - Błąd połączenia</title>
+    <style>
+      body {
+        margin: 0;
+        background: #0b1220;
+        color: #e5edf9;
+        font-family: Segoe UI, Tahoma, sans-serif;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 56px auto;
+        padding: 0 20px;
+      }
+      .card {
+        border: 1px solid #2a3a52;
+        background: #0f1a2b;
+        padding: 18px;
+        border-radius: 8px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 24px;
+      }
+      p { margin: 8px 0; }
+      code {
+        background: #0b1322;
+        border: 1px solid #2a3a52;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #9ed0ff;
+      }
+      ul { margin: 10px 0 0 20px; }
+      li { margin: 6px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Nie można połączyć z x265 Converter</h1>
+        <p>Adres: <code>${safeUrl}</code></p>
+        <p>Błąd: <code>${safeError}</code></p>
+        <ul>
+          <li>Sprawdź, czy kontener Unraid działa i wystawia właściwy port.</li>
+          <li>Jeśli używasz skrótu Unraid, docelowy adres powinien być na porcie <code>3001</code>.</li>
+          <li>Zweryfikuj: <code>curl ${safeUrl}/api/health</code></li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1300,
@@ -178,6 +248,18 @@ async function createWindow() {
   });
 
   const appUrl = remoteUrlArg || `http://${HOST}:${PORT}`;
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || !mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    const failedUrl = validatedURL || appUrl;
+    const message = `${errorDescription || 'Błąd ładowania'} (code: ${errorCode})`;
+    const html = buildLoadErrorPage(failedUrl, message);
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  });
+
   mainWindow.loadURL(appUrl);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
