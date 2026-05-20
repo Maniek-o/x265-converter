@@ -33,7 +33,7 @@ docker run -d \
   -e PUBLIC_URL=http://localhost:3001 \
   -e AUTO_OPEN_BROWSER=0 \
   -e APP_TMP_DIR=/tmp/x265-converter \
-  -v /mnt/user/media:/data \
+   -v "/mnt/user/2x SSD/Data-x265-converter:/data" \
   -v /mnt/user/appdata/x265-converter/tmp:/tmp/x265-converter \
   --restart unless-stopped \
   x265-converter:latest

@@ -17,7 +17,7 @@
 - **Unraid OS** (6.11+)
 - **Docker** (zainstalowany domyślnie na Unraid)
 - **Dostęp SSH** lub **Unraid Terminal** (dostępne w WebUI)
-- Folder na dysku Unraid: `/mnt/user/media` lub inny
+- Folder na dysku Unraid: `/mnt/user/2x SSD/Data-x265-converter` lub inny
 - ~2GB wolnego miejsca na kontener
 
 ### Sprawdzenie wersji Unraid
@@ -65,7 +65,7 @@ cat /etc/unraid-version
 ### Krok 3: Konfiguracja i start
 Wymagane ustawienia w formularzu:
 - **Web UI Port**: `3001`
-- **Media Folder**: `/mnt/user/media` (lub dowolny inny folder z plikami)
+- **Media Folder**: `/mnt/user/2x SSD/Data-x265-converter` (lub dowolny inny folder z plikami)
 - **Temp Folder**: `/mnt/user/appdata/x265-converter/tmp`
 - **PUBLIC_URL**: `http://IP_UNRAID:3001` (zamień IP_UNRAID na IP Twojej maszyny)
 
@@ -130,7 +130,7 @@ docker run -d \
   -e PUBLIC_URL="http://192.168.X.X:3001" \
   -e AUTO_OPEN_BROWSER=0 \
   -e FILE_OPEN_ENABLED=0 \
-  -v /mnt/user/media:/data \
+   -v "/mnt/user/2x SSD/Data-x265-converter:/data" \
   -v /mnt/user/appdata/x265-converter/tmp:/tmp/x265-converter \
   x265-converter:latest
 ```

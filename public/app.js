@@ -243,25 +243,59 @@ async function handleAddFilesDialog() {
 
   try {
     const selected = await window.electronAPI.openFilesDialog();
-    const files = (Array.isArray(selected) ? selected : []).map((item) => {
-      if (typeof item === 'string') {
-        return {
-          path: item,
-          name: basename(item),
-          sizeBytes: 0
-        };
+    const selectedPaths = Array.isArray(selected) ? selected : [];
+    
+    if (!selectedPaths.length) {
+      setScanStatus('Nie wybrano żadnych plików ani folderów.', false);
+      return;
+    }
+
+    const allFiles = [];
+    
+    // Process each selected item (could be file or folder)
+    for (const itemPath of selectedPaths) {
+      const normalizedPath = typeof itemPath === 'string' ? itemPath : String(itemPath?.path || '').trim();
+      if (!normalizedPath) continue;
+      
+      try {
+        // Try to scan as folder first
+        const scanResult = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath: normalizedPath })
+        });
+        
+        if (scanResult.ok) {
+          // It's a folder - got files from scan
+          const scanPayload = await scanResult.json();
+          if (scanPayload.files && Array.isArray(scanPayload.files)) {
+            allFiles.push(...scanPayload.files);
+          }
+        } else {
+          // Not a folder, treat as single file
+          allFiles.push({
+            path: normalizedPath,
+            name: typeof itemPath === 'string' ? basename(normalizedPath) : (itemPath?.name || basename(normalizedPath)),
+            sizeBytes: typeof itemPath === 'string' ? 0 : (itemPath?.sizeBytes || 0)
+          });
+        }
+      } catch (error) {
+        // If scan fails, treat as single file
+        allFiles.push({
+          path: normalizedPath,
+          name: typeof itemPath === 'string' ? basename(normalizedPath) : (itemPath?.name || basename(normalizedPath)),
+          sizeBytes: typeof itemPath === 'string' ? 0 : (itemPath?.sizeBytes || 0)
+        });
       }
+    }
 
-      const filePath = String(item?.path || '').trim();
-      return {
-        path: filePath,
-        name: String(item?.name || basename(filePath)),
-        sizeBytes: Number(item?.sizeBytes || 0)
-      };
-    }).filter((file) => file.path);
+    if (!allFiles.length) {
+      setScanStatus('Brak plików video w wyborze.', true);
+      return;
+    }
 
-    mergeScannedFiles(files);
-    setScanStatus(`Dodano pliki: ${files.length}.`, false);
+    const addedCount = mergeScannedFiles(allFiles);
+    setScanStatus(`Dodano pliki i foldery: ${addedCount} plików video.`, false);
   } catch (error) {
     setScanStatus(error.message || 'Nie udało się dodać plików.', true);
   }

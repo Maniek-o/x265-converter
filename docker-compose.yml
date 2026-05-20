@@ -22,7 +22,7 @@ services:
       FFPROBE_PATH: /usr/bin/ffprobe
     volumes:
       # Folder z plikami video
-      - /mnt/user/media:/data
+      - "/mnt/user/2x SSD/Data-x265-converter:/data"
       # Folder roboczy (cache, tymczasowe)
       - /mnt/user/appdata/x265-converter/tmp:/tmp/x265-converter
       # Wyniki konwersji (opcjonalnie inny folder)

@@ -107,7 +107,7 @@ ghcr.io/maniek-o/x265-converter:latest
 docker run -d \
   --name x265-converter \
   -p 3001:3001 \
-  -v /mnt/user/media:/data \
+  -v "/mnt/user/2x SSD/Data-x265-converter:/data" \
   -v /mnt/user/appdata/x265-converter/tmp:/tmp/x265-converter \
   x265-converter:latest
 ```

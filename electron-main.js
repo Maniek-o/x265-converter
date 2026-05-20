@@ -213,8 +213,8 @@ ipcMain.handle('open-files-dialog', async () => {
   if (!win) return [];
 
   const result = await dialog.showOpenDialog(win, {
-    title: 'Wybierz pliki video',
-    properties: ['openFile', 'multiSelections'],
+    title: 'Wybierz pliki lub foldery video',
+    properties: ['openFile', 'openDirectory', 'multiSelections'],
     filters: [
       {
         name: 'Video',
