@@ -196,8 +196,8 @@ function initializeRuntimeMode() {
   }
 
   if (elements.browseBtn) {
-    elements.browseBtn.disabled = true;
-    elements.browseBtn.title = 'Tryb zdalny: uzyj sciezki /data i kliknij Skanuj.';
+    elements.browseBtn.disabled = false;
+    elements.browseBtn.title = 'Tryb zdalny: ustaw sciezke na serwerze Unraid (np. /data).';
   }
 
   if (elements.addFilesBtn) {
@@ -210,7 +210,20 @@ function initializeRuntimeMode() {
 
 async function handleBrowseFolder() {
   if (IS_REMOTE_BACKEND) {
-    setScanStatus('Tryb zdalny: wpisz sciezke na Unraid, np. /data, i kliknij Skanuj.', true);
+    const currentPath = String(elements.sourcePath?.value || '/data').trim() || '/data';
+    const selectedPath = window.prompt('Podaj sciezke na Unraid (np. /data lub /data/podfolder):', currentPath);
+    if (selectedPath == null) {
+      return;
+    }
+
+    const normalized = String(selectedPath).trim();
+    if (!normalized) {
+      setScanStatus('Podaj poprawna sciezke na serwerze Unraid.', true);
+      return;
+    }
+
+    elements.sourcePath.value = normalized;
+    setScanStatus('Ustawiono sciezke zrodla. Kliknij Skanuj.', false);
     return;
   }
 
