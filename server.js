@@ -1380,16 +1380,6 @@ async function createJob(sourceFile, settings) {
     skipReason: null
   };
 
-  if (isHevcSource) {
-    job.status = 'skipped';
-    job.finishedAt = new Date().toISOString();
-    job.skipReason = `Pominięto: źródło jest już HEVC/x265 (${sourceCodec || 'hevc'}).`;
-    job.metrics.progressPercent = 100;
-    job.metrics.currentSizeBytes = sourceSizeBytes;
-    job.metrics.estimatedOutputSizeBytes = sourceSizeBytes;
-    return job;
-  }
-
   if (settings.smartQuality && suggestedQuality) {
     const optimized = await optimizeSmartQualityBySamples(job);
     if (optimized) {
@@ -2143,8 +2133,7 @@ async function prepareJobForQueue(job) {
     const sourceDurationSeconds = Number(probe.format?.duration || 0);
     const videoStream = (probe.streams || []).find((stream) => stream.codec_type === 'video');
     const audioStream = (probe.streams || []).find((stream) => stream.codec_type === 'audio');
-    const sourceCodec = String(videoStream?.codec_name || '').toLowerCase();
-    const isHevcSource = isHevcLikeCodec(sourceCodec);
+    const isHevcSource = isHevcLikeCodec(videoStream?.codec_name);
     const shouldUseSmartCrfMode = job.settings.smartQuality
       && !isHevcSource
       && Math.abs(Number(job.settings.targetPercent || 55) - 55) < 0.5;
@@ -2157,19 +2146,6 @@ async function prepareJobForQueue(job) {
     job.metrics.durationSeconds = job.settings.testClipEnabled
       ? Math.max(1, Math.min(60, sourceDurationSeconds || 60))
       : sourceDurationSeconds;
-
-    if (isHevcSource) {
-      job.status = 'skipped';
-      job.finishedAt = new Date().toISOString();
-      job.skipReason = `Pominięto: źródło jest już HEVC/x265 (${sourceCodec || 'hevc'}).`;
-      job.metrics.progressPercent = 100;
-      job.metrics.currentSizeBytes = job.metrics.sourceSizeBytes;
-      job.metrics.estimatedOutputSizeBytes = job.metrics.sourceSizeBytes;
-      runNextJob().catch((error) => {
-        console.error('Queue runner failed:', error);
-      });
-      return;
-    }
 
     job.suggestedQuality = shouldUseSmartCrfMode
       ? suggestQualityFromProbe(probe)
