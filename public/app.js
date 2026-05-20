@@ -208,11 +208,29 @@ function initializeRuntimeMode() {
   setScanStatus('Tryb zdalny: skanuj pliki z /data na serwerze Unraid.', false);
 }
 
-async function handleBrowseFolder() {
+async function handleBrowseFolder(event) {
+  if (event && typeof event.preventDefault === 'function') {
+    event.preventDefault();
+  }
+
   if (IS_REMOTE_BACKEND) {
     const currentPath = String(elements.sourcePath?.value || '/data').trim() || '/data';
-    const selectedPath = window.prompt('Podaj sciezke na Unraid (np. /data lub /data/podfolder):', currentPath);
+
+    if (elements.sourcePath) {
+      elements.sourcePath.value = currentPath;
+      elements.sourcePath.focus();
+      elements.sourcePath.select();
+    }
+
+    let selectedPath = null;
+    try {
+      selectedPath = window.prompt('Podaj sciezke na Unraid (np. /data lub /data/podfolder):', currentPath);
+    } catch (_error) {
+      selectedPath = null;
+    }
+
     if (selectedPath == null) {
+      setScanStatus('Wpisz sciezke w polu obok (np. /data) i kliknij Skanuj.', false);
       return;
     }
 
