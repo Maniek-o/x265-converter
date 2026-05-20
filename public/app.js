@@ -188,6 +188,11 @@ function updatePresetChip() {
 
 function initializeRuntimeMode() {
   if (!IS_REMOTE_BACKEND) {
+    if (elements.addFilesBtn) {
+      elements.addFilesBtn.hidden = false;
+      elements.addFilesBtn.disabled = false;
+    }
+    elements.dropzone?.classList.remove('is-remote');
     return;
   }
 
@@ -201,9 +206,12 @@ function initializeRuntimeMode() {
   }
 
   if (elements.addFilesBtn) {
+    elements.addFilesBtn.hidden = true;
     elements.addFilesBtn.disabled = true;
     elements.addFilesBtn.title = 'Tryb zdalny: dodawanie lokalnych plikow jest niedostepne.';
   }
+
+  elements.dropzone?.classList.add('is-remote');
 
   setScanStatus('Tryb zdalny: skanuj pliki z /data na serwerze Unraid.', false);
 }
@@ -581,7 +589,7 @@ function clearFilesToQueue() {
 
   state.scannedFiles = [];
   renderFiles();
-  setScanStatus('Wyczyszczono pliki do kolejki.', false);
+  setScanStatus('Wyczyszczono kolejkę plików.', false);
   void refreshSmartQualityHint();
 }
 
@@ -825,7 +833,7 @@ function renderJobs() {
   const convertedPct = totalJobs > 0 ? (convertedJobs / totalJobs) * 100 : 0;
 
   elements.queueStats.textContent =
-    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte HEVC: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
+    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
 
   elements.jobsList.classList.remove('empty-state');
   elements.jobsList.innerHTML = `
@@ -1021,6 +1029,10 @@ function renderJobRow(job) {
   if (job.skipReason) notes.push(job.skipReason);
   if (job.error) notes.push(`Błąd: ${job.error}`);
   const notesHtml = notes.length ? `<div class="job-row-note">${escapeHtml(notes.join(' | '))}</div>` : '';
+  const createdAtText = formatIsoDateTime(job.createdAt);
+  const startedAtText = formatIsoDateTime(job.startedAt);
+  const finishedAtText = formatIsoDateTime(job.finishedAt);
+  const timestampsHtml = `<div class="job-row-time">Dodano: ${escapeHtml(createdAtText)} | Start: ${escapeHtml(startedAtText)} | Koniec: ${escapeHtml(finishedAtText)}</div>`;
 
   const actions = [];
   if (job.status === 'processing' || job.status === 'queued' || job.status === 'preparing') {
@@ -1044,6 +1056,7 @@ function renderJobRow(job) {
       <td>
         <div class="job-row-file">${escapeHtml(basename(job.sourceFile))}</div>
         <div class="job-row-path">${escapeHtml(job.outputPath || '(brak pliku wynikowego)')}</div>
+        ${timestampsHtml}
         ${notesHtml}
       </td>
       <td>
@@ -1073,7 +1086,7 @@ function statusLabel(status) {
     queued: 'W kolejce',
     processing: 'Przetwarzanie',
     completed: 'Gotowe',
-    skipped: 'Pominięte (HEVC)',
+    skipped: 'Pominięte',
     failed: 'Błąd',
     cancelled: 'Anulowane'
   };
