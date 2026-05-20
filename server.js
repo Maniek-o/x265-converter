@@ -158,6 +158,53 @@ app.post('/api/open-path', async (req, res) => {
   }
 });
 
+app.get('/api/jobs/:jobId/stream', async (req, res) => {
+  try {
+    const jobId = Number(req.params.jobId);
+    const job = queueState.jobs.find((item) => item.id === jobId);
+    if (!job) {
+      return sendError(res, 404, 'JOB_NOT_FOUND', 'Zadanie nie znalezione.');
+    }
+
+    const outputPath = String(job.outputPath || '').trim();
+    if (!outputPath) {
+      return sendError(res, 400, 'INVALID_STATE', 'Plik wyjściowy nie jest ustawiony dla tego zadania.');
+    }
+
+    const stat = await fsp.stat(outputPath).catch(() => null);
+    if (!stat || !stat.isFile()) {
+      return sendError(res, 404, 'FILE_NOT_FOUND', 'Plik wyjściowy nie istnieje.');
+    }
+
+    const ext = path.extname(outputPath).toLowerCase();
+    const contentTypeMap = {
+      '.mkv': 'video/x-matroska',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.avi': 'video/x-msvideo',
+      '.mov': 'video/quicktime',
+      '.flv': 'video/x-flv',
+      '.m4v': 'video/x-m4v',
+      '.mpg': 'video/mpeg',
+      '.mpeg': 'video/mpeg',
+      '.ts': 'video/mp2t',
+      '.wmv': 'video/x-ms-wmv'
+    };
+    const contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.sendFile(outputPath);
+  } catch (error) {
+    return sendError(res, 500, 'INTERNAL_ERROR', error.message || 'Nie udało się streamować pliku.');
+  }
+});
+
 app.post('/api/jobs', async (req, res) => {
   try {
     const sourceFiles = Array.isArray(req.body?.sourceFiles) ? req.body.sourceFiles : [];

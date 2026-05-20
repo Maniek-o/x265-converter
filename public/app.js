@@ -811,18 +811,22 @@ function renderJobs() {
     });
   });
 
-  elements.jobsList.querySelectorAll('[data-open-output]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const filePath = button.dataset.openOutput;
-      if (!filePath) return;
+  elements.jobsList.querySelectorAll('[data-stream-job]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const jobId = Number(button.dataset.streamJob);
+      if (!jobId) return;
       try {
-        await fetch('/api/open-path', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath })
-        });
+        // Construct stream URL using current window location
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        const port = window.location.port ? `:${window.location.port}` : '';
+        const streamUrl = `${protocol}//${hostname}${port}/api/jobs/${jobId}/stream`;
+        
+        // Open stream URL in new window/tab; browser will handle MIME type
+        // If VLC is default player for video, it will launch automatically
+        window.open(streamUrl, '_blank');
       } catch (error) {
-        elements.queueStats.textContent = error.message || 'Nie udało się otworzyć pliku wynikowego.';
+        elements.queueStats.textContent = error.message || 'Nie udało się otworzyć pliku w odtwarzaczu.';
       }
     });
   });
@@ -966,7 +970,7 @@ function renderJobRow(job) {
     actions.push(`<button class="action-btn small" data-compare-output="${job.id}">${compareLabel}</button>`);
   }
   if (canOpenResult) {
-    actions.push(`<button class="action-btn small" data-open-output="${escapeHtmlAttr(job.outputPath)}">Otwórz</button>`);
+    actions.push(`<button class="action-btn small" data-stream-job="${job.id}">Otwórz</button>`);
   }
 
   return `
