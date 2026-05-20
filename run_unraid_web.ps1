@@ -13,19 +13,25 @@ try {
     }
 
     Write-Host "x265 Converter - Unraid Web Client" -ForegroundColor Cyan
-    Write-Host "Otwieram: $Url" -ForegroundColor Green
 
+    $chosenUrl = $Url
+    $healthOk = $false
     try {
-        $healthUrl = $Url.TrimEnd('/') + '/api/health'
+        $healthUrl = $chosenUrl.TrimEnd('/') + '/api/health'
         $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 3
-        if (-not $health.ok) {
-            Write-Host "Uwaga: backend odpowiedzial nieoczekiwanie." -ForegroundColor Yellow
+        if ($health.ok) {
+            $healthOk = $true
         }
     } catch {
-        Write-Host "Uwaga: brak odpowiedzi z backendu. Mimo to otwieram aplikacje web." -ForegroundColor Yellow
+        # continue and open URL anyway
     }
 
-    Start-Process $Url
+    if (-not $healthOk) {
+        Write-Host "Uwaga: backend nie odpowiada na /api/health. Otwieram URL mimo to." -ForegroundColor Yellow
+    }
+
+    Write-Host "Otwieram: $chosenUrl" -ForegroundColor Green
+    Start-Process $chosenUrl
 } catch {
     Write-Host ("ERROR: " + $_.Exception.Message) -ForegroundColor Red
     exit 1
