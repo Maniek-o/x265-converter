@@ -107,6 +107,17 @@
               </select>
             </div>
 
+            <div class="inline-field-row">
+              <label class="field-label-inline" for="maxConcurrentJobs">Jednoczesne konwersje</label>
+              <select id="maxConcurrentJobs">
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+
             <div class="setting-stack">
               <label class="field-label" for="targetPercent">Docelowy rozmiar: <span id="targetPercentValue">55%</span></label>
               <input id="targetPercent" type="range" min="20" max="95" step="1" value="55">
@@ -129,6 +140,7 @@
       <section id="queueSection" class="panel queue-panel">
         <div class="queue-header">
           <h2>Kolejka</h2>
+          <span id="queueInlineStats" class="muted compact">Przekonwertowano: 0/0 (0.0%) | Aktywne: 0 | W kolejce: 0</span>
         </div>
 
         <div class="collapse-toggle-row">

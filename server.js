@@ -29,7 +29,8 @@ const ffprobePath = resolveBinary('ffprobe', ffprobeInstaller.path);
 const queueState = {
   jobs: [],
   activeJobIds: new Set(),
-  nextId: 1
+  nextId: 1,
+  maxConcurrentJobs: Math.max(1, Math.min(5, Number(process.env.MAX_CONCURRENT_JOBS || 1)))
 };
 
 const PRESET_MAP = {
@@ -78,6 +79,7 @@ app.get('/api/health', async (_req, res) => {
     activeJobId: [...queueState.activeJobIds][0] ?? null,
     activeJobCount: queueState.activeJobIds.size,
     queueLength: queueState.jobs.filter((job) => job.status === 'queued').length,
+    maxConcurrentJobs: queueState.maxConcurrentJobs,
     cpuUsagePercent: Number(cpuMetricsState.cpuUsagePercent.toFixed(1)),
     processCpuPercent: Number(cpuMetricsState.processCpuPercent.toFixed(1)),
     processRssMB: Number(cpuMetricsState.processRssMB.toFixed(1))
@@ -100,10 +102,13 @@ app.post('/api/scan', async (req, res) => {
     const files = await scanForVideos(normalizedSourcePath);
     const enriched = await Promise.all(files.map(async (filePath) => {
       const fileStat = await fsp.stat(filePath);
+      const probe = await ffprobe(filePath).catch(() => null);
+      const durationSeconds = Number(probe?.format?.duration || 0);
       return {
         path: filePath,
         name: path.basename(filePath),
-        sizeBytes: fileStat.size
+        sizeBytes: fileStat.size,
+        durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : 0
       };
     }));
 
@@ -244,6 +249,34 @@ app.post('/api/jobs', async (req, res) => {
 app.get('/api/jobs', (_req, res) => {
   res.json({
     jobs: queueState.jobs.map(toClientJob),
+    summary: getQueueSummary(queueState.jobs),
+    config: {
+      maxConcurrentJobs: queueState.maxConcurrentJobs
+    }
+  });
+});
+
+app.get('/api/queue/config', (_req, res) => {
+  res.json({
+    maxConcurrentJobs: queueState.maxConcurrentJobs
+  });
+});
+
+app.post('/api/queue/config', async (req, res) => {
+  const requested = Number(req.body?.maxConcurrentJobs);
+  if (!Number.isFinite(requested)) {
+    return sendError(res, 400, 'INVALID_INPUT', 'Brak maxConcurrentJobs.');
+  }
+
+  queueState.maxConcurrentJobs = Math.max(1, Math.min(5, Math.floor(requested)));
+  enforceConcurrencyLimit();
+  runNextJob().catch((error) => {
+    console.error('Queue runner failed:', error);
+  });
+
+  return res.json({
+    maxConcurrentJobs: queueState.maxConcurrentJobs,
+    jobs: queueState.jobs.map(toClientJob),
     summary: getQueueSummary(queueState.jobs)
   });
 });
@@ -264,6 +297,17 @@ app.post('/api/jobs/:jobId/cancel', async (req, res) => {
     return res.json({ job: toClientJob(job) });
   }
 
+  if (job.status === 'paused' && job.process) {
+    job.cancelRequested = true;
+    try {
+      job.process.kill('SIGCONT');
+    } catch (_error) {
+      // ignore
+    }
+    job.process.kill('SIGTERM');
+    return res.json({ job: toClientJob(job) });
+  }
+
   if (job.status === 'processing' && job.process) {
     job.cancelRequested = true;
     job.process.kill('SIGTERM');
@@ -278,6 +322,17 @@ app.post('/api/jobs/:jobId/resume', async (req, res) => {
   const job = queueState.jobs.find((item) => item.id === jobId);
   if (!job) {
     return sendError(res, 404, 'JOB_NOT_FOUND', 'Nie znaleziono zadania.');
+  }
+
+  if (job.status === 'paused' && job.process) {
+    const resumed = resumePausedJob(job);
+    if (!resumed) {
+      return sendError(res, 400, 'INVALID_STATE', 'Nie udało się wznowić procesu ffmpeg.');
+    }
+    runNextJob().catch((error) => {
+      console.error('Queue runner failed:', error);
+    });
+    return res.json({ job: toClientJob(job) });
   }
 
   if (job.status === 'cancelled' || job.status === 'failed') {
@@ -1440,35 +1495,98 @@ function ffprobe(sourceFile) {
 }
 
 async function runNextJob() {
-  const processing = queueState.jobs.filter((job) => job.status === 'processing');
-  const concurrencyLimit = 1;
+  enforceConcurrencyLimit();
 
-  if (processing.length >= concurrencyLimit) {
-    return;
+  while (true) {
+    const processingCount = queueState.jobs.filter((job) => job.status === 'processing').length;
+    if (processingCount >= queueState.maxConcurrentJobs) {
+      return;
+    }
+
+    const pausedJob = queueState.jobs.find((job) => job.status === 'paused' && job.process);
+    if (pausedJob) {
+      const resumed = resumePausedJob(pausedJob);
+      if (!resumed) {
+        return;
+      }
+      continue;
+    }
+
+    const nextJob = queueState.jobs.find((job) => job.status === 'queued');
+    if (!nextJob) {
+      return;
+    }
+
+    queueState.activeJobIds.add(nextJob.id);
+    nextJob.status = 'processing';
+    nextJob.startedAt = nextJob.startedAt || new Date().toISOString();
+
+    runJob(nextJob)
+      .then(() => {
+        nextJob.status = nextJob.cancelRequested ? 'cancelled' : 'completed';
+      })
+      .catch((error) => {
+        nextJob.status = nextJob.cancelRequested ? 'cancelled' : 'failed';
+        nextJob.error = error.message;
+      })
+      .finally(() => {
+        nextJob.finishedAt = new Date().toISOString();
+        nextJob.process = null;
+        queueState.activeJobIds.delete(nextJob.id);
+        runNextJob().catch((error) => {
+          console.error('Queue runner failed:', error);
+        });
+      });
   }
+}
 
-  const nextJob = queueState.jobs.find((job) => job.status === 'queued');
-  if (!nextJob) {
-    return;
+function enforceConcurrencyLimit() {
+  while (true) {
+    const processingJobs = queueState.jobs.filter((job) => job.status === 'processing' && job.process);
+    if (processingJobs.length <= queueState.maxConcurrentJobs) {
+      return;
+    }
+
+    // Przy zmniejszaniu limitu pauzuj zadanie z najmniejszym postępem.
+    const toPause = processingJobs
+      .slice()
+      .sort((a, b) => Number(a.metrics?.progressPercent || 0) - Number(b.metrics?.progressPercent || 0))[0];
+
+    if (!toPause) {
+      return;
+    }
+
+    pauseProcessingJob(toPause);
   }
+}
 
-  queueState.activeJobIds.add(nextJob.id);
-  nextJob.status = 'processing';
-  nextJob.startedAt = new Date().toISOString();
+function pauseProcessingJob(job) {
+  if (!job || job.status !== 'processing' || !job.process) {
+    return false;
+  }
 
   try {
-    await runJob(nextJob);
-    nextJob.status = nextJob.cancelRequested ? 'cancelled' : 'completed';
-  } catch (error) {
-    nextJob.status = nextJob.cancelRequested ? 'cancelled' : 'failed';
-    nextJob.error = error.message;
-  } finally {
-    nextJob.finishedAt = new Date().toISOString();
-    nextJob.process = null;
-    queueState.activeJobIds.delete(nextJob.id);
-    runNextJob().catch((error) => {
-      console.error('Queue runner failed:', error);
-    });
+    job.process.kill('SIGSTOP');
+    job.status = 'paused';
+    queueState.activeJobIds.delete(job.id);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function resumePausedJob(job) {
+  if (!job || job.status !== 'paused' || !job.process) {
+    return false;
+  }
+
+  try {
+    job.process.kill('SIGCONT');
+    job.status = 'processing';
+    queueState.activeJobIds.add(job.id);
+    return true;
+  } catch (_error) {
+    return false;
   }
 }
 
@@ -2047,8 +2165,15 @@ function stopJob(job) {
     return true;
   }
 
-  if (job.status === 'processing' && job.process) {
+  if ((job.status === 'processing' || job.status === 'paused') && job.process) {
     job.cancelRequested = true;
+    if (job.status === 'paused') {
+      try {
+        job.process.kill('SIGCONT');
+      } catch (_error) {
+        // ignore
+      }
+    }
     job.process.kill('SIGTERM');
     return true;
   }
@@ -2185,6 +2310,7 @@ function getQueueSummary(jobs) {
     preparing: 0,
     queued: 0,
     processing: 0,
+    paused: 0,
     completed: 0,
     skipped: 0,
     failed: 0,
@@ -2203,6 +2329,8 @@ function getQueueSummary(jobs) {
       summary.queued += 1;
     } else if (status === 'processing') {
       summary.processing += 1;
+    } else if (status === 'paused') {
+      summary.paused += 1;
     } else if (status === 'completed') {
       summary.completed += 1;
     } else if (status === 'skipped') {
@@ -2217,7 +2345,7 @@ function getQueueSummary(jobs) {
     let progressFactor = 0;
     if (status === 'completed' || status === 'skipped') {
       progressFactor = 1;
-    } else if (status === 'processing') {
+    } else if (status === 'processing' || status === 'paused') {
       progressFactor = Math.min(1, Math.max(0, Number(job.metrics?.progressPercent || 0) / 100));
     }
 

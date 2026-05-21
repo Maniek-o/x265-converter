@@ -171,6 +171,20 @@ html[data-theme="dark"] .queue-row.status-processing td:last-child {
   border-right: 2px solid #4aa864;
 }
 
+html[data-theme="dark"] .queue-row.status-paused td {
+  background: #3a2f10;
+  border-top-color: #bd9631;
+  border-bottom-color: #bd9631;
+}
+
+html[data-theme="dark"] .queue-row.status-paused td:first-child {
+  border-left: 2px solid #bd9631;
+}
+
+html[data-theme="dark"] .queue-row.status-paused td:last-child {
+  border-right: 2px solid #bd9631;
+}
+
 html[data-theme="dark"] .queue-row.status-queued td {
   background: #242a36;
   color: #9aa5b9;
@@ -356,6 +370,12 @@ h1, h2, h3, p { margin-top: 0; }
   font-size: 17px;
   font-weight: 600;
   margin-bottom: 0;
+}
+
+#queueInlineStats {
+  text-align: right;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .path-row {
@@ -751,6 +771,20 @@ button:disabled {
 
 .queue-row.status-processing td:last-child {
   border-right: 2px solid #3c9150;
+}
+
+.queue-row.status-paused td {
+  background: #fff8dc;
+  border-top: 1px solid #d0ad3f;
+  border-bottom: 1px solid #d0ad3f;
+}
+
+.queue-row.status-paused td:first-child {
+  border-left: 2px solid #b28a20;
+}
+
+.queue-row.status-paused td:last-child {
+  border-right: 2px solid #b28a20;
 }
 
 .queue-row.status-queued td {

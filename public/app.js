@@ -25,12 +25,14 @@ const state = {
     qualityPreset: 'quality',
     audioCodec: 'opus',
     audioBitrateKbps: 96,
+    maxConcurrentJobs: 1,
     testClipEnabled: false,
     smartQuality: false
   }
 };
 
 let previewWindowRef = null;
+const pendingDurationPaths = new Set();
 
 const elements = {
   sourcePath: document.querySelector('#sourcePath'),
@@ -51,6 +53,7 @@ const elements = {
   qualityPreset: document.querySelector('#qualityPreset'),
   audioCodec: document.querySelector('#audioCodec'),
   audioBitrate: document.querySelector('#audioBitrate'),
+  maxConcurrentJobs: document.querySelector('#maxConcurrentJobs'),
   testClipEnabled: document.querySelector('#testClipEnabled'),
   smartQualityEnabled: document.querySelector('#smartQualityEnabled'),
   smartQualityHint: document.querySelector('#smartQualityHint'),
@@ -76,6 +79,7 @@ const elements = {
   overallProgressLabel: document.querySelector('#overallProgressLabel'),
   overallProgressBar: document.querySelector('#overallProgressBar'),
   currentJobSummary: document.querySelector('#currentJobSummary'),
+  queueInlineStats: document.querySelector('#queueInlineStats'),
   queueStats: document.querySelector('#queueStats'),
   queueLastRefreshed: document.querySelector('#queueLastRefreshed'),
   backendMarker: document.querySelector('#backendMarker'),
@@ -131,6 +135,10 @@ elements.audioCodec?.addEventListener('change', (event) => {
 elements.audioBitrate?.addEventListener('change', (event) => {
   state.settings.audioBitrateKbps = Number(event.target.value);
 });
+elements.maxConcurrentJobs?.addEventListener('change', async (event) => {
+  const value = Number(event.target.value);
+  await updateQueueConfig(value);
+});
 elements.fpsMode?.addEventListener('change', (event) => {
   state.settings.fpsMode = event.target.value === '24' ? '24' : 'source';
   updatePresetChip();
@@ -168,6 +176,7 @@ setInterval(() => {
 
 void refreshBackendMarker();
 void refreshJobs();
+void loadQueueConfig();
 void refreshSmartQualityHint();
 updatePresetChip();
 
@@ -563,15 +572,78 @@ function mergeScannedFiles(newFiles) {
         path: normalizedPath,
         name: file.name || basename(normalizedPath),
         sizeBytes: Number(file.sizeBytes || 0),
+        durationSeconds: Number(file.durationSeconds || 0),
         selected: true
       });
       addedCount += 1;
+    } else {
+      const existing = byPath.get(key);
+      const incomingDuration = Number(file.durationSeconds || 0);
+      if ((!Number.isFinite(existing.durationSeconds) || existing.durationSeconds <= 0) && incomingDuration > 0) {
+        existing.durationSeconds = incomingDuration;
+      }
     }
   }
 
   state.scannedFiles = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path, 'pl'));
   renderFiles();
+  void hydrateMissingDurations();
   return addedCount;
+}
+
+async function hydrateMissingDurations() {
+  const candidates = state.scannedFiles.filter((file) => {
+    const hasDuration = Number.isFinite(Number(file.durationSeconds)) && Number(file.durationSeconds) > 0;
+    return !hasDuration && !pendingDurationPaths.has(file.path);
+  });
+
+  if (!candidates.length) {
+    return;
+  }
+
+  const requests = candidates.map(async (file) => {
+    pendingDurationPaths.add(file.path);
+    try {
+      const response = await fetch('/api/preview/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFile: file.path })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        return null;
+      }
+
+      const durationSeconds = Number(payload.durationSeconds || 0);
+      if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+        return null;
+      }
+
+      return { path: file.path, durationSeconds };
+    } catch (_error) {
+      return null;
+    } finally {
+      pendingDurationPaths.delete(file.path);
+    }
+  });
+
+  const resolved = (await Promise.all(requests)).filter(Boolean);
+  if (!resolved.length) {
+    return;
+  }
+
+  const byPath = new Map(resolved.map((item) => [item.path.toLowerCase(), item.durationSeconds]));
+  state.scannedFiles = state.scannedFiles.map((file) => {
+    const matchedDuration = byPath.get(String(file.path || '').toLowerCase());
+    if (!matchedDuration) {
+      return file;
+    }
+    return {
+      ...file,
+      durationSeconds: matchedDuration
+    };
+  });
+  renderFiles();
 }
 
 function toggleSelection() {
@@ -608,7 +680,7 @@ function renderFiles() {
       <div class="file-row file-row-compact">
         <input type="checkbox" data-index="${index}" ${file.selected ? 'checked' : ''}>
         <span class="file-path-inline">${escapeHtml(dirPath)}${slash}<strong class="file-name-inline">${escapeHtml(file.name)}</strong></span>
-        <span class="file-size">${formatBytes(file.sizeBytes)}</span>
+        <span class="file-size">${formatBytes(file.sizeBytes)} | ${formatDurationShort(file.durationSeconds)}</span>
         <button type="button" class="ghost small preview-btn" data-preview-index="${index}">Podgląd testowy</button>
       </div>
     `;
@@ -718,6 +790,12 @@ async function refreshJobs() {
 
       state.jobs = payload.jobs || [];
       state.summary = payload.summary || null;
+      if (payload.config && Number.isFinite(Number(payload.config.maxConcurrentJobs))) {
+        state.settings.maxConcurrentJobs = Math.max(1, Math.min(5, Number(payload.config.maxConcurrentJobs)));
+        if (elements.maxConcurrentJobs) {
+          elements.maxConcurrentJobs.value = String(state.settings.maxConcurrentJobs);
+        }
+      }
       state.lastJobsRefreshAt = new Date();
       renderJobs();
     } catch (error) {
@@ -728,6 +806,53 @@ async function refreshJobs() {
   })();
 
   return state.jobsRefreshPromise;
+}
+
+async function loadQueueConfig() {
+  try {
+    const response = await fetch('/api/queue/config');
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Nie udało się pobrać konfiguracji kolejki.');
+    }
+    const nextValue = Math.max(1, Math.min(5, Number(payload.maxConcurrentJobs || 1)));
+    state.settings.maxConcurrentJobs = nextValue;
+    if (elements.maxConcurrentJobs) {
+      elements.maxConcurrentJobs.value = String(nextValue);
+    }
+  } catch (_error) {
+    // Ignore to keep UI usable with defaults.
+  }
+}
+
+async function updateQueueConfig(maxConcurrentJobs) {
+  const normalized = Math.max(1, Math.min(5, Number(maxConcurrentJobs || 1)));
+  state.settings.maxConcurrentJobs = normalized;
+  if (elements.maxConcurrentJobs) {
+    elements.maxConcurrentJobs.value = String(normalized);
+    elements.maxConcurrentJobs.disabled = true;
+  }
+
+  try {
+    const response = await fetch('/api/queue/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ maxConcurrentJobs: normalized })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Nie udało się zmienić limitu jednoczesnych konwersji.');
+    }
+    state.jobs = payload.jobs || state.jobs;
+    state.summary = payload.summary || state.summary;
+    renderJobs();
+  } catch (error) {
+    elements.queueStats.textContent = error.message || 'Nie udało się zmienić limitu jednoczesnych konwersji.';
+  } finally {
+    if (elements.maxConcurrentJobs) {
+      elements.maxConcurrentJobs.disabled = false;
+    }
+  }
 }
 
 async function resumeAllJobs() {
@@ -808,6 +933,9 @@ function renderJobs() {
     if (elements.currentJobSummary) {
       elements.currentJobSummary.textContent = 'Brak aktywnie konwertowanego pliku.';
     }
+    if (elements.queueInlineStats) {
+      elements.queueInlineStats.textContent = 'Przekonwertowano: 0/0 (0.0%) | Aktywne: 0 | W kolejce: 0';
+    }
     elements.queueStats.textContent = 'Brak aktywnych zadań.';
     elements.jobsList.textContent = 'Kolejka jest pusta.';
     elements.jobsList.classList.add('empty-state');
@@ -817,6 +945,7 @@ function renderJobs() {
   const summary = state.summary || {
     preparing: state.jobs.filter((job) => job.status === 'preparing').length,
     processing: state.jobs.filter((job) => job.status === 'processing').length,
+    paused: state.jobs.filter((job) => job.status === 'paused').length,
     queued: state.jobs.filter((job) => job.status === 'queued').length,
     completed: state.jobs.filter((job) => job.status === 'completed').length,
     skipped: state.jobs.filter((job) => job.status === 'skipped').length,
@@ -831,16 +960,35 @@ function renderJobs() {
   const totalJobs = state.jobs.length;
   const convertedJobs = Number(summary.completed || 0);
   const convertedPct = totalJobs > 0 ? (convertedJobs / totalJobs) * 100 : 0;
+  const queueTiming = buildQueueTimingInfo(summary);
 
-  // Licznik w headzie "Kolejka"
   const queueHeading = elements.jobsList.closest('section')?.querySelector('h2') || document.querySelector('#queueSection h2');
   if (queueHeading) {
     queueHeading.textContent = `Kolejka | ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%)`;
   }
+  if (elements.queueInlineStats) {
+    elements.queueInlineStats.textContent = `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Aktywne: ${(summary.processing || 0) + (summary.paused || 0)} | W kolejce: ${summary.queued || 0}`;
+  }
 
-  // Rozszerzone statystyki poniżej
   elements.queueStats.textContent =
-    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Pominięte: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
+    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Aktywne: ${summary.processing || 0} | Pauza: ${summary.paused || 0} | Pozostało w kolejce: ${summary.queued || 0} | Pominięte: ${summary.skipped || 0} | Błędy: ${summary.failed || 0} | Anulowane: ${summary.cancelled || 0} | Czas kolejki: ${queueTiming.elapsedText} | Pozostało: ${queueTiming.remainingText}`;
+
+  const prioritizedJobs = [...state.jobs].sort((a, b) => {
+    const rank = (status) => {
+      if (status === 'processing') return 0;
+      if (status === 'paused') return 1;
+      if (status === 'preparing') return 2;
+      if (status === 'queued') return 3;
+      if (status === 'failed') return 4;
+      if (status === 'cancelled') return 5;
+      if (status === 'skipped') return 6;
+      if (status === 'completed') return 7;
+      return 8;
+    };
+    const rankDiff = rank(a.status) - rank(b.status);
+    if (rankDiff !== 0) return rankDiff;
+    return Number(a.id || 0) - Number(b.id || 0);
+  });
 
   elements.jobsList.classList.remove('empty-state');
   elements.jobsList.innerHTML = `
@@ -857,7 +1005,7 @@ function renderJobs() {
           </tr>
         </thead>
         <tbody>
-          ${state.jobs.map((job) => renderJobRow(job)).join('')}
+          ${prioritizedJobs.map((job) => renderJobRow(job)).join('')}
         </tbody>
       </table>
     </div>
@@ -946,7 +1094,7 @@ function renderCurrentJobSummary(summary) {
   }
 
   const total = state.jobs.length;
-  const active = state.jobs.find((job) => job.status === 'processing') || state.jobs.find((job) => job.status === 'preparing');
+  const active = state.jobs.find((job) => job.status === 'processing') || state.jobs.find((job) => job.status === 'paused') || state.jobs.find((job) => job.status === 'preparing');
   const completedLike = (summary.completed || 0) + (summary.skipped || 0) + (summary.failed || 0) + (summary.cancelled || 0);
   const currentIndex = Math.min(total, completedLike + (active ? 1 : 0));
   const pct = Number(summary.overallProgressPercent || 0);
@@ -957,11 +1105,15 @@ function renderCurrentJobSummary(summary) {
   }
 
   const activeName = basename(active.sourceFile || '');
-  elements.currentJobSummary.textContent = `Aktualnie konwertuje: ${activeName} | ${currentIndex}/${total} | ${pct.toFixed(1)}%`;
+  const activeFps = Number(active.metrics?.fps || 0);
+  const activeEta = active.metrics?.etaSeconds == null ? '...' : formatEta(active.metrics.etaSeconds);
+  const statusLabelText = active.status === 'paused' ? 'Wstrzymane' : 'Aktualnie konwertuje';
+  elements.currentJobSummary.textContent = `${statusLabelText}: ${activeName} | ${currentIndex}/${total} | ${pct.toFixed(1)}% | ETA: ${activeEta} | ${activeFps.toFixed(1)} fps`;
 }
 
 function ensureActiveJobVisible() {
-  const activeRow = elements.jobsList.querySelector('tr.queue-row.status-processing');
+  const activeRow = elements.jobsList.querySelector('tr.queue-row.status-processing')
+    || elements.jobsList.querySelector('tr.queue-row.status-paused');
   elements.jobsList.querySelectorAll('tr.queue-row').forEach((row) => row.classList.remove('is-current-job'));
   if (!activeRow) {
     return;
@@ -1022,7 +1174,7 @@ function renderJobRow(job) {
   const sourceSize = Number(job.metrics?.sourceSizeBytes || 0);
   const outputSize = Number(job.metrics?.currentSizeBytes || 0);
   const conversionSeconds = job.metrics?.conversionSeconds;
-  const sourceDuration = Number(job.metrics?.sourceVideoDuration || 0);
+  const sourceDuration = Number(job.metrics?.sourceDurationSeconds || 0);
   const durationText = sourceDuration > 0 ? formatDuration(sourceDuration) : '—';
   const status = statusLabel(job.status);
 
@@ -1045,10 +1197,10 @@ function renderJobRow(job) {
   const timestampsHtml = ''; // Ukryte timestamps
 
   const actions = [];
-  if (job.status === 'processing' || job.status === 'queued' || job.status === 'preparing') {
+  if (job.status === 'processing' || job.status === 'paused' || job.status === 'queued' || job.status === 'preparing') {
     actions.push(`<button class="ghost small" data-cancel-job="${job.id}">Anuluj</button>`);
   }
-  if (job.status === 'cancelled' || job.status === 'failed') {
+  if (job.status === 'cancelled' || job.status === 'failed' || job.status === 'paused') {
     actions.push(`<button class="ghost small" data-resume-job="${job.id}">Wznów</button>`);
   }
   actions.push(`<button class="action-btn small" data-preview-source="${escapeHtmlAttr(job.sourceFile)}">Podgląd</button>`);
@@ -1095,6 +1247,7 @@ function statusLabel(status) {
     preparing: 'Przygotowywanie',
     queued: 'W kolejce',
     processing: 'Przetwarzanie',
+    paused: 'Wstrzymane',
     completed: 'Gotowe',
     skipped: 'Pominięte',
     failed: 'Błąd',
@@ -1133,6 +1286,51 @@ function formatDuration(seconds) {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+function formatDurationShort(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '...';
+  const rounded = Math.max(0, Math.round(seconds));
+  const h = Math.floor(rounded / 3600);
+  const m = Math.floor((rounded % 3600) / 60);
+  const s = rounded % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function buildQueueTimingInfo(summary) {
+  const nowMs = Date.now();
+  const startedTimes = state.jobs
+    .map((job) => job.startedAt)
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((value) => Number.isFinite(value));
+
+  const queueStartedAt = startedTimes.length ? Math.min(...startedTimes) : null;
+  const elapsedSeconds = queueStartedAt ? Math.max(0, Math.floor((nowMs - queueStartedAt) / 1000)) : 0;
+
+  const activeJobs = state.jobs.filter((job) => job.status === 'processing' || job.status === 'paused');
+  const queuedCount = Number(summary.queued || 0) + Number(summary.preparing || 0);
+  const activeEtaSum = activeJobs
+    .map((job) => Number(job.metrics?.etaSeconds || 0))
+    .reduce((acc, value) => acc + (Number.isFinite(value) ? value : 0), 0);
+
+  const finishedJobs = state.jobs.filter((job) => job.status === 'completed' && Number.isFinite(Number(job.metrics?.conversionSeconds || 0)));
+  const avgCompletedSeconds = finishedJobs.length
+    ? finishedJobs.reduce((acc, job) => acc + Number(job.metrics?.conversionSeconds || 0), 0) / finishedJobs.length
+    : 0;
+
+  const concurrency = Math.max(1, Number(state.settings.maxConcurrentJobs || 1));
+  const queuedEtaEstimate = avgCompletedSeconds > 0 ? (queuedCount * avgCompletedSeconds) / concurrency : 0;
+  const remainingSeconds = Math.max(0, Math.round(activeEtaSum + queuedEtaEstimate));
+
+  return {
+    elapsedSeconds,
+    remainingSeconds,
+    elapsedText: formatEta(elapsedSeconds),
+    remainingText: formatEta(remainingSeconds)
+  };
 }
 
 function renderOverallProgress(progressPercent) {
