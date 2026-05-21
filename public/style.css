@@ -39,9 +39,9 @@ html[data-theme="dark"] {
   --muted: #9aa6bb;
   --btn: #171c24;
   --btn-hover: #222936;
-  --accent: #7fb0ff;
-  --accent-soft: #1a2740;
-  --good: #72cf8c;
+  --accent: #00b4ff;
+  --accent-soft: #0d3a5c;
+  --good: #1aa850;
   --bad: #eb8686;
 }
 
@@ -986,9 +986,16 @@ button:disabled {
 }
 
 .is-current-job td {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  background: #eef5ff;
+  outline: 3px solid #1aa850;
+  outline-offset: -3px;
+  background: #0a2e1a;
+  border-color: #1aa850;
+}
+
+html[data-theme="dark"] .is-current-job td {
+  outline: 3px solid #1aa850;
+  outline-offset: -3px;
+  background: #0a2e1a;
 }
 
 html[data-theme="dark"] .backend-status-card {

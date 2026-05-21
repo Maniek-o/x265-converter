@@ -832,8 +832,15 @@ function renderJobs() {
   const convertedJobs = Number(summary.completed || 0);
   const convertedPct = totalJobs > 0 ? (convertedJobs / totalJobs) * 100 : 0;
 
+  // Licznik w headzie "Kolejka"
+  const queueHeading = elements.jobsList.closest('section')?.querySelector('h2') || document.querySelector('#queueSection h2');
+  if (queueHeading) {
+    queueHeading.textContent = `Kolejka | ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%)`;
+  }
+
+  // Rozszerzone statystyki poniżej
   elements.queueStats.textContent =
-    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Gotowe: ${summary.completed} | Pominięte: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
+    `Przekonwertowano: ${convertedJobs}/${totalJobs} (${convertedPct.toFixed(1)}%) | Przygotowywane: ${summary.preparing || 0} | Aktywne: ${summary.processing} | W kolejce: ${summary.queued} | Pominięte: ${summary.skipped || 0} | Błędy: ${summary.failed} | Anulowane: ${summary.cancelled}`;
 
   elements.jobsList.classList.remove('empty-state');
   elements.jobsList.innerHTML = `
@@ -1015,6 +1022,8 @@ function renderJobRow(job) {
   const sourceSize = Number(job.metrics?.sourceSizeBytes || 0);
   const outputSize = Number(job.metrics?.currentSizeBytes || 0);
   const conversionSeconds = job.metrics?.conversionSeconds;
+  const sourceDuration = Number(job.metrics?.sourceVideoDuration || 0);
+  const durationText = sourceDuration > 0 ? formatDuration(sourceDuration) : '—';
   const status = statusLabel(job.status);
 
   const savedPercent = Number(job.sizeSavedPercent);
@@ -1029,10 +1038,11 @@ function renderJobRow(job) {
   if (job.skipReason) notes.push(job.skipReason);
   if (job.error) notes.push(`Błąd: ${job.error}`);
   const notesHtml = notes.length ? `<div class="job-row-note">${escapeHtml(notes.join(' | '))}</div>` : '';
-  const createdAtText = formatIsoDateTime(job.createdAt);
-  const startedAtText = formatIsoDateTime(job.startedAt);
-  const finishedAtText = formatIsoDateTime(job.finishedAt);
-  const timestampsHtml = `<div class="job-row-time">Dodano: ${escapeHtml(createdAtText)} | Start: ${escapeHtml(startedAtText)} | Koniec: ${escapeHtml(finishedAtText)}</div>`;
+  // UKRYTE: const createdAtText = formatIsoDateTime(job.createdAt);
+  // UKRYTE: const startedAtText = formatIsoDateTime(job.startedAt);
+  // UKRYTE: const finishedAtText = formatIsoDateTime(job.finishedAt);
+  // UKRYTE: const timestampsHtml = `<div class="job-row-time">Dodano: ${escapeHtml(createdAtText)} | Start: ${escapeHtml(startedAtText)} | Koniec: ${escapeHtml(finishedAtText)}</div>`;
+  const timestampsHtml = ''; // Ukryte timestamps
 
   const actions = [];
   if (job.status === 'processing' || job.status === 'queued' || job.status === 'preparing') {
@@ -1065,7 +1075,7 @@ function renderJobRow(job) {
         <div class="job-row-meta">ETA: ${eta} · ${fps}</div>
       </td>
       <td>
-        <div>Org: ${formatBytes(sourceSize)}</div>
+        <div>Org: ${formatBytes(sourceSize)} | ${durationText}</div>
         <div>Po: ${formatBytes(outputSize)}</div>
         <div class="saving-badge ${savingsClass}">${savingsText}</div>
       </td>
@@ -1115,6 +1125,16 @@ function formatEta(totalSeconds) {
   return `${remainingSeconds}s`;
 }
 
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 function renderOverallProgress(progressPercent) {
   const safeProgress = Math.min(100, Math.max(0, Number(progressPercent || 0)));
   elements.overallProgressLabel.textContent = `Całość przekonwertowana: ${safeProgress.toFixed(1)}%`;
@@ -1144,16 +1164,17 @@ async function refreshBackendMarker() {
     const cpuTotal = Number.isFinite(Number(payload.cpuUsagePercent))
       ? Number(payload.cpuUsagePercent)
       : 0;
-    const rss = Number.isFinite(Number(payload.processRssMB))
-      ? `${Number(payload.processRssMB).toFixed(0)} MB`
-      : '-';
+    // RAM info usunięty - nie potrzebny
+    // const rss = Number.isFinite(Number(payload.processRssMB))
+    //   ? `${Number(payload.processRssMB).toFixed(0)} MB`
+    //   : '-';
 
     state.backendCpuHistory.push(cpuTotal);
     if (state.backendCpuHistory.length > 32) {
       state.backendCpuHistory.shift();
     }
 
-    state.backendMarkerText = `Backend: ${appHost} | CPU: ${cpuTotal.toFixed(1)}% | RAM: ${rss}`;
+    state.backendMarkerText = `Backend: ${appHost} | CPU: ${cpuTotal.toFixed(1)}%`;
     drawCpuMiniChart();
   } catch (_error) {
     state.backendMarkerText = 'Backend: niedostępny';
