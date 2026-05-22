@@ -1909,12 +1909,17 @@ function resolveGpuVideoEncoder() {
   if (requested === 'hevc_qsv' || requested === 'qsv') {
     return 'hevc_qsv';
   }
+  if (requested === 'hevc_vaapi' || requested === 'vaapi') {
+    return 'hevc_vaapi';
+  }
   if (requested === 'hevc_nvenc' || requested === 'nvenc') {
     return 'hevc_nvenc';
   }
 
+  // On Unraid/Linux prefer VAAPI by default because it is broadly stable
+  // across Intel iGPU generations and container runtime combinations.
   if (process.platform === 'linux' && fs.existsSync('/dev/dri/renderD128')) {
-    return 'hevc_qsv';
+    return 'hevc_vaapi';
   }
 
   return 'hevc_nvenc';
