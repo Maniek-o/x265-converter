@@ -25,6 +25,7 @@ const appRoot = __dirname;
 const tmpRoot = path.resolve(process.env.APP_TMP_DIR || path.join(appRoot, 'tmp'));
 const ffmpegPath = resolveBinary('ffmpeg', ffmpegInstaller.path);
 const ffprobePath = resolveBinary('ffprobe', ffprobeInstaller.path);
+const GPU_VIDEO_ENCODER = resolveGpuVideoEncoder();
 
 const queueState = {
   jobs: [],
@@ -76,6 +77,7 @@ app.get('/api/health', async (_req, res) => {
     instanceId: SERVER_INSTANCE_ID,
     ffmpegPath,
     ffprobePath,
+    gpuVideoEncoder: GPU_VIDEO_ENCODER,
     activeJobId: [...queueState.activeJobIds][0] ?? null,
     activeJobCount: queueState.activeJobIds.size,
     queueLength: queueState.jobs.filter((job) => job.status === 'queued').length,
@@ -1728,7 +1730,7 @@ function buildFfmpegArgs(job) {
   const readableMode = conversionMode === 'smart-crf'
     ? 'Smart CRF (próbki)'
     : 'Bitrate docelowy';
-  const readableEncoder = settings.encoder === 'gpu' ? 'GPU / hevc_nvenc' : 'CPU / libx265';
+  const readableEncoder = settings.encoder === 'gpu' ? `GPU / ${GPU_VIDEO_ENCODER}` : 'CPU / libx265';
   const readableAudio = settings.audioCodec === 'copy'
     ? 'copy bez zmian'
     : `Opus ${Math.round(Number(settings.audioBitrateKbps || 96))} kb/s`;
@@ -1777,12 +1779,19 @@ function buildFfmpegArgs(job) {
     const effectiveAudioKbps = sq.audioBitrateKbps || settings.audioBitrateKbps;
 
     if (settings.encoder === 'gpu') {
-      args.push(
-        '-c:v', 'hevc_nvenc',
-        '-preset', gpuPreset,
-        '-rc', 'constqp',
-        '-qp', String(sq.crf)
-      );
+      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
+        args.push(
+          '-c:v', 'hevc_qsv',
+          '-global_quality', String(normalizeQsvGlobalQuality(sq.crf))
+        );
+      } else {
+        args.push(
+          '-c:v', 'hevc_nvenc',
+          '-preset', gpuPreset,
+          '-rc', 'constqp',
+          '-qp', String(sq.crf)
+        );
+      }
     } else {
       args.push(
         '-c:v', 'libx265',
@@ -1799,14 +1808,23 @@ function buildFfmpegArgs(job) {
     }
   } else {
     if (settings.encoder === 'gpu') {
-      args.push(
-        '-c:v', 'hevc_nvenc',
-        '-preset', presetMap.gpu[settings.qualityPreset],
-        '-rc', 'vbr',
-        '-b:v', String(videoBitrate),
-        '-maxrate', String(Math.round(videoBitrate * 1.25)),
-        '-bufsize', String(Math.round(videoBitrate * 2))
-      );
+      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
+        args.push(
+          '-c:v', 'hevc_qsv',
+          '-b:v', String(videoBitrate),
+          '-maxrate', String(Math.round(videoBitrate * 1.25)),
+          '-bufsize', String(Math.round(videoBitrate * 2))
+        );
+      } else {
+        args.push(
+          '-c:v', 'hevc_nvenc',
+          '-preset', presetMap.gpu[settings.qualityPreset],
+          '-rc', 'vbr',
+          '-b:v', String(videoBitrate),
+          '-maxrate', String(Math.round(videoBitrate * 1.25)),
+          '-bufsize', String(Math.round(videoBitrate * 2))
+        );
+      }
     } else {
       const cpuPreset = presetMap.cpu[settings.qualityPreset];
       args.push(
@@ -1865,6 +1883,30 @@ function normalizeColorRange(value) {
   }
 
   return null;
+}
+
+function resolveGpuVideoEncoder() {
+  const requested = String(process.env.GPU_VIDEO_ENCODER || '').trim().toLowerCase();
+  if (requested === 'hevc_qsv' || requested === 'qsv') {
+    return 'hevc_qsv';
+  }
+  if (requested === 'hevc_nvenc' || requested === 'nvenc') {
+    return 'hevc_nvenc';
+  }
+
+  if (process.platform === 'linux' && fs.existsSync('/dev/dri/renderD128')) {
+    return 'hevc_qsv';
+  }
+
+  return 'hevc_nvenc';
+}
+
+function normalizeQsvGlobalQuality(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 24;
+  }
+  return Math.max(10, Math.min(45, Math.round(numeric)));
 }
 
 function parseFfmpegProgress(job, chunk) {
@@ -2029,7 +2071,11 @@ function encodeSampleAndScore(job, options) {
     ];
 
     if (isGpu) {
-      args.push('-c:v', 'hevc_nvenc', '-preset', gpuPreset, '-rc', 'constqp', '-qp', String(crf));
+      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
+        args.push('-c:v', 'hevc_qsv', '-global_quality', String(normalizeQsvGlobalQuality(crf)));
+      } else {
+        args.push('-c:v', 'hevc_nvenc', '-preset', gpuPreset, '-rc', 'constqp', '-qp', String(crf));
+      }
     } else {
       args.push('-c:v', 'libx265', '-preset', cpuPreset, '-crf', String(crf), '-tag:v', 'hvc1');
     }
