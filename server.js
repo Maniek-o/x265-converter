@@ -1612,8 +1612,27 @@ function runJob(job) {
         }
       }
 
-      const args = buildFfmpegArgs(job);
-      await runFfmpegCommand(job, args);
+      const fallbackPlans = buildEncoderFallbackPlans(job);
+      let lastError = null;
+      for (let index = 0; index < fallbackPlans.length; index += 1) {
+        const plan = fallbackPlans[index];
+        const args = buildFfmpegArgs(job, plan);
+        try {
+          await runFfmpegCommand(job, args);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          await removeOutputFile(job.outputPath);
+          if (job.cancelRequested || index >= fallbackPlans.length - 1) {
+            throw error;
+          }
+        }
+      }
+
+      if (lastError) {
+        throw lastError;
+      }
 
       if (job.cancelRequested) {
         if (job.deleteOutputOnFinish) {
@@ -1653,6 +1672,19 @@ function runJob(job) {
   });
 }
 
+function buildEncoderFallbackPlans(job) {
+  const plans = [{ encoderMode: job.settings?.encoder || 'cpu', gpuVideoEncoder: GPU_VIDEO_ENCODER }];
+  if (job.settings?.encoder !== 'gpu') {
+    return plans;
+  }
+
+  if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
+    plans.push({ encoderMode: 'gpu', gpuVideoEncoder: 'hevc_vaapi' });
+  }
+  plans.push({ encoderMode: 'cpu', gpuVideoEncoder: GPU_VIDEO_ENCODER });
+  return plans;
+}
+
 function runFfmpegCommand(job, args) {
   return new Promise((resolve, reject) => {
     const processHandle = spawn(ffmpegPath, args, { windowsHide: true });
@@ -1684,8 +1716,10 @@ function runFfmpegCommand(job, args) {
     });
   });
 }
-function buildFfmpegArgs(job) {
+function buildFfmpegArgs(job, options = {}) {
   const { sourceFile, outputPath, settings, metrics, probe } = job;
+  const encoderMode = options.encoderMode || settings.encoder || 'cpu';
+  const gpuVideoEncoder = options.gpuVideoEncoder || GPU_VIDEO_ENCODER;
   const duration = Math.max(1, metrics.sourceDurationSeconds || metrics.durationSeconds || 1);
   const cores = Math.max(1, (os.cpus() || []).length || 1);
   const threadLimit = cores;
@@ -1730,7 +1764,7 @@ function buildFfmpegArgs(job) {
   const readableMode = conversionMode === 'smart-crf'
     ? 'Smart CRF (próbki)'
     : 'Bitrate docelowy';
-  const readableEncoder = settings.encoder === 'gpu' ? `GPU / ${GPU_VIDEO_ENCODER}` : 'CPU / libx265';
+  const readableEncoder = encoderMode === 'gpu' ? `GPU / ${gpuVideoEncoder}` : 'CPU / libx265';
   const readableAudio = settings.audioCodec === 'copy'
     ? 'copy bez zmian'
     : `Opus ${Math.round(Number(settings.audioBitrateKbps || 96))} kb/s`;
@@ -1754,7 +1788,8 @@ function buildFfmpegArgs(job) {
     ['encoded_by', 'x265 Converter'],
     ['x265_converter_mode', conversionMode],
     ['x265_converter_target_percent', String(targetPercent)],
-    ['x265_converter_encoder', String(settings.encoder || 'cpu')],
+    ['x265_converter_encoder', String(encoderMode || 'cpu')],
+    ['x265_converter_gpu_backend', String(gpuVideoEncoder || '')],
     ['x265_converter_preset', String(effectivePreset)],
     ['x265_converter_audio_codec', String(settings.audioCodec || 'opus')],
     ['x265_converter_audio_bitrate_kbps', String(Math.round(Number(settings.audioBitrateKbps || 96)))],
@@ -1778,20 +1813,14 @@ function buildFfmpegArgs(job) {
     const gpuPreset = presetMap.gpu[sq.preset] || 'p4';
     const effectiveAudioKbps = sq.audioBitrateKbps || settings.audioBitrateKbps;
 
-    if (settings.encoder === 'gpu') {
-      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
-        args.push(
-          '-c:v', 'hevc_qsv',
-          '-global_quality', String(normalizeQsvGlobalQuality(sq.crf))
-        );
-      } else {
-        args.push(
-          '-c:v', 'hevc_nvenc',
-          '-preset', gpuPreset,
-          '-rc', 'constqp',
-          '-qp', String(sq.crf)
-        );
-      }
+    if (encoderMode === 'gpu') {
+      appendGpuEncodeArgs(args, {
+        gpuVideoEncoder,
+        qualityPreset: gpuPreset,
+        crf: sq.crf,
+        videoBitrate,
+        isSmartQuality: true
+      });
     } else {
       args.push(
         '-c:v', 'libx265',
@@ -1807,24 +1836,14 @@ function buildFfmpegArgs(job) {
       args.push('-c:a', 'libopus', '-b:a', `${effectiveAudioKbps}k`);
     }
   } else {
-    if (settings.encoder === 'gpu') {
-      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
-        args.push(
-          '-c:v', 'hevc_qsv',
-          '-b:v', String(videoBitrate),
-          '-maxrate', String(Math.round(videoBitrate * 1.25)),
-          '-bufsize', String(Math.round(videoBitrate * 2))
-        );
-      } else {
-        args.push(
-          '-c:v', 'hevc_nvenc',
-          '-preset', presetMap.gpu[settings.qualityPreset],
-          '-rc', 'vbr',
-          '-b:v', String(videoBitrate),
-          '-maxrate', String(Math.round(videoBitrate * 1.25)),
-          '-bufsize', String(Math.round(videoBitrate * 2))
-        );
-      }
+    if (encoderMode === 'gpu') {
+      appendGpuEncodeArgs(args, {
+        gpuVideoEncoder,
+        qualityPreset: presetMap.gpu[settings.qualityPreset],
+        crf: null,
+        videoBitrate,
+        isSmartQuality: false
+      });
     } else {
       const cpuPreset = presetMap.cpu[settings.qualityPreset];
       args.push(
@@ -1907,6 +1926,64 @@ function normalizeQsvGlobalQuality(value) {
     return 24;
   }
   return Math.max(10, Math.min(45, Math.round(numeric)));
+}
+
+function normalizeVaapiQp(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 24;
+  }
+  return Math.max(8, Math.min(45, Math.round(numeric)));
+}
+
+function appendGpuEncodeArgs(args, options) {
+  const gpuVideoEncoder = String(options.gpuVideoEncoder || GPU_VIDEO_ENCODER || 'hevc_nvenc').toLowerCase();
+  const qualityPreset = String(options.qualityPreset || 'p4');
+  const videoBitrate = Math.max(1, Number(options.videoBitrate || 1));
+  const isSmartQuality = Boolean(options.isSmartQuality);
+
+  if (gpuVideoEncoder === 'hevc_qsv') {
+    args.push('-qsv_device', '/dev/dri/renderD128');
+    if (isSmartQuality) {
+      args.push('-c:v', 'hevc_qsv', '-global_quality', String(normalizeQsvGlobalQuality(options.crf)));
+    } else {
+      args.push(
+        '-c:v', 'hevc_qsv',
+        '-b:v', String(videoBitrate),
+        '-maxrate', String(Math.round(videoBitrate * 1.25)),
+        '-bufsize', String(Math.round(videoBitrate * 2))
+      );
+    }
+    return;
+  }
+
+  if (gpuVideoEncoder === 'hevc_vaapi') {
+    args.push('-vaapi_device', '/dev/dri/renderD128', '-vf', 'format=nv12,hwupload');
+    if (isSmartQuality) {
+      args.push('-c:v', 'hevc_vaapi', '-qp', String(normalizeVaapiQp(options.crf)));
+    } else {
+      args.push(
+        '-c:v', 'hevc_vaapi',
+        '-b:v', String(videoBitrate),
+        '-maxrate', String(Math.round(videoBitrate * 1.25)),
+        '-bufsize', String(Math.round(videoBitrate * 2))
+      );
+    }
+    return;
+  }
+
+  if (isSmartQuality) {
+    args.push('-c:v', 'hevc_nvenc', '-preset', qualityPreset, '-rc', 'constqp', '-qp', String(options.crf));
+  } else {
+    args.push(
+      '-c:v', 'hevc_nvenc',
+      '-preset', qualityPreset,
+      '-rc', 'vbr',
+      '-b:v', String(videoBitrate),
+      '-maxrate', String(Math.round(videoBitrate * 1.25)),
+      '-bufsize', String(Math.round(videoBitrate * 2))
+    );
+  }
 }
 
 function parseFfmpegProgress(job, chunk) {
@@ -2071,11 +2148,13 @@ function encodeSampleAndScore(job, options) {
     ];
 
     if (isGpu) {
-      if (GPU_VIDEO_ENCODER === 'hevc_qsv') {
-        args.push('-c:v', 'hevc_qsv', '-global_quality', String(normalizeQsvGlobalQuality(crf)));
-      } else {
-        args.push('-c:v', 'hevc_nvenc', '-preset', gpuPreset, '-rc', 'constqp', '-qp', String(crf));
-      }
+      appendGpuEncodeArgs(args, {
+        gpuVideoEncoder: GPU_VIDEO_ENCODER,
+        qualityPreset: gpuPreset,
+        crf,
+        videoBitrate: 2_000_000,
+        isSmartQuality: true
+      });
     } else {
       args.push('-c:v', 'libx265', '-preset', cpuPreset, '-crf', String(crf), '-tag:v', 'hvc1');
     }
