@@ -62,7 +62,7 @@
             <div class="setting-stack">
               <span class="field-label">Silnik wideo</span>
               <div class="segmented-control" id="encoderSwitch">
-                <button data-value="cpu" class="is-active">CPU</button>
+                <button data-value="cpu">CPU</button>
                 <button data-value="gpu">GPU</button>
               </div>
             </div>
@@ -122,11 +122,6 @@
               <label class="field-label" for="targetPercent">Docelowy rozmiar: <span id="targetPercentValue">55%</span></label>
               <input id="targetPercent" type="range" min="20" max="95" step="1" value="55">
             </div>
-
-            <label class="field-label test-mode-toggle">
-              <input id="testClipEnabled" type="checkbox">
-              <span>Tryb testowy: konwertuj tylko 1 minutę</span>
-            </label>
 
             <div class="settings-summary-box">
               <p id="smartQualityHint" class="muted compact">Probe-based 1-pass (próbki): wyłączony.</p>

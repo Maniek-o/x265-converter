@@ -19,14 +19,13 @@ const state = {
   backendCpuHistory: [],
   presets: [],
   settings: {
-    encoder: 'cpu',
+    encoder: 'gpu',
     fpsMode: 'source',
     targetPercent: 55,
     qualityPreset: 'quality',
     audioCodec: 'opus',
     audioBitrateKbps: 96,
     maxConcurrentJobs: 1,
-    testClipEnabled: false,
     smartQuality: false
   }
 };
@@ -54,7 +53,6 @@ const elements = {
   audioCodec: document.querySelector('#audioCodec'),
   audioBitrate: document.querySelector('#audioBitrate'),
   maxConcurrentJobs: document.querySelector('#maxConcurrentJobs'),
-  testClipEnabled: document.querySelector('#testClipEnabled'),
   smartQualityEnabled: document.querySelector('#smartQualityEnabled'),
   smartQualityHint: document.querySelector('#smartQualityHint'),
   settingsHeaderTitle: document.querySelector('#settingsHeaderTitle'),
@@ -142,9 +140,6 @@ elements.maxConcurrentJobs?.addEventListener('change', async (event) => {
 elements.fpsMode?.addEventListener('change', (event) => {
   state.settings.fpsMode = event.target.value === '24' ? '24' : 'source';
   updatePresetChip();
-});
-elements.testClipEnabled?.addEventListener('change', (event) => {
-  state.settings.testClipEnabled = event.target.checked;
 });
 elements.smartQualityEnabled?.addEventListener('change', async (event) => {
   state.settings.smartQuality = event.target.checked;
@@ -712,8 +707,7 @@ function openSamplePreviewWindow(index) {
     mode: 'sample',
     sourceFile: file.path,
     settings: JSON.stringify({
-      ...state.settings,
-      testClipEnabled: false
+      ...state.settings
     })
   });
 
@@ -1614,7 +1608,6 @@ function settingsSnapshot() {
     qualityPreset: state.settings.qualityPreset,
     audioCodec: state.settings.audioCodec,
     audioBitrateKbps: state.settings.audioBitrateKbps,
-    testClipEnabled: state.settings.testClipEnabled,
     smartQuality: state.settings.smartQuality
   };
 }
@@ -1631,7 +1624,6 @@ function applySettingsToUi() {
   if (elements.qualityPreset) elements.qualityPreset.value = state.settings.qualityPreset;
   if (elements.audioCodec) elements.audioCodec.value = state.settings.audioCodec;
   if (elements.audioBitrate) elements.audioBitrate.value = String(state.settings.audioBitrateKbps);
-  if (elements.testClipEnabled) elements.testClipEnabled.checked = Boolean(state.settings.testClipEnabled);
   if (elements.smartQualityEnabled) elements.smartQualityEnabled.checked = Boolean(state.settings.smartQuality);
   updatePresetChip();
   void refreshSmartQualityHint();

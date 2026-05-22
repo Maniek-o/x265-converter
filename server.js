@@ -1193,12 +1193,11 @@ function isVideoInputError(error) {
 }
 
 function normalizeSettings(input) {
-  const encoder = input.encoder === 'gpu' ? 'gpu' : 'cpu';
+  const encoder = input.encoder === 'cpu' ? 'cpu' : 'gpu';
   const targetPercent = clampNumber(Number(input.targetPercent), 20, 95, 55);
   const qualityPreset = normalizeQualityPreset(input.qualityPreset);
   const audioCodec = input.audioCodec === 'copy' ? 'copy' : 'opus';
   const audioBitrateKbps = clampNumber(Number(input.audioBitrateKbps), 32, 320, 96);
-  const testClipEnabled = Boolean(input.testClipEnabled);
   const smartQuality = Boolean(input.smartQuality);
   const fpsMode = input.fpsMode === '24' ? '24' : 'source';
 
@@ -1208,7 +1207,6 @@ function normalizeSettings(input) {
     qualityPreset,
     audioCodec,
     audioBitrateKbps,
-    testClipEnabled,
     smartQuality,
     fpsMode
   };
@@ -1382,9 +1380,7 @@ async function createJob(sourceFile, settings) {
 
   const probe = await ffprobe(sourceFile);
   const sourceDurationSeconds = Number(probe.format?.duration || 0);
-  const durationSeconds = settings.testClipEnabled
-    ? Math.max(1, Math.min(60, sourceDurationSeconds || 60))
-    : sourceDurationSeconds;
+  const durationSeconds = sourceDurationSeconds;
   const sourceSizeBytes = Number(probe.format?.size || 0);
   const videoStream = (probe.streams || []).find((stream) => stream.codec_type === 'video');
   const audioStream = (probe.streams || []).find((stream) => stream.codec_type === 'audio');
@@ -1454,7 +1450,7 @@ async function createJob(sourceFile, settings) {
 
 function buildOutputPath(sourceFile, settings) {
   const parsed = path.parse(sourceFile);
-  const suffix = settings.testClipEnabled ? ' --- x265 TEST-1m' : ' --- x265';
+  const suffix = ' --- x265';
   return path.join(parsed.dir, `${parsed.name}${suffix}.mkv`);
 }
 
@@ -1865,10 +1861,6 @@ function buildFfmpegArgs(job, options = {}) {
 
   if (sourceColorRange) {
     args.push('-color_range', sourceColorRange);
-  }
-
-  if (settings.testClipEnabled) {
-    args.push('-t', '60');
   }
 
   if (settings.fpsMode === '24') {
@@ -2398,9 +2390,7 @@ async function prepareJobForQueue(job) {
     job.audioCodec = audioStream?.codec_name || null;
     job.isHevcSource = isHevcSource;
     job.metrics.sourceDurationSeconds = sourceDurationSeconds;
-    job.metrics.durationSeconds = job.settings.testClipEnabled
-      ? Math.max(1, Math.min(60, sourceDurationSeconds || 60))
-      : sourceDurationSeconds;
+    job.metrics.durationSeconds = sourceDurationSeconds;
 
     job.suggestedQuality = shouldUseSmartCrfMode
       ? suggestQualityFromProbe(probe)

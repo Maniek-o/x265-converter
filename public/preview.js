@@ -52,6 +52,11 @@ const elements = {
   stage: document.querySelector('#stage'),
   stageWrap: document.querySelector('.stage-wrap'),
   stageFullscreenBtn: document.querySelector('#stageFullscreenBtn'),
+  resultTransportCard: document.querySelector('#resultTransportCard'),
+  resultPlayPauseBtn: document.querySelector('#resultPlayPauseBtn'),
+  resultSeekSlider: document.querySelector('#resultSeekSlider'),
+  resultSeekCurrent: document.querySelector('#resultSeekCurrent'),
+  resultSeekDuration: document.querySelector('#resultSeekDuration'),
   sourceHintText: document.querySelector('#sourceHintText'),
   encodedHintText: document.querySelector('#encodedHintText'),
   errorText: document.querySelector('#errorText')
@@ -89,7 +94,8 @@ const state = {
   panStartScrollLeft: 0,
   panStartScrollTop: 0,
   sourceSizeBytes: 0,
-  encodedSizeBytes: 0
+  encodedSizeBytes: 0,
+  resultSeekDragging: false
 };
 
 elements.closeBtn.addEventListener('click', () => window.close());
@@ -158,8 +164,8 @@ async function init() {
 
   if (mode === 'result') {
     document.body.classList.add('result-mode');
-    if (elements.videoOriginal) {
-      elements.videoOriginal.controls = false;
+    if (elements.resultTransportCard) {
+      elements.resultTransportCard.hidden = false;
     }
     if (elements.videoEncoded) {
       elements.videoEncoded.controls = false;
@@ -195,16 +201,88 @@ async function init() {
     const encodedUrl = `/api/preview/direct/video?filePath=${encodeURIComponent(encodedFile)}`;
     try {
       await loadPreviewVideos(originalUrl, encodedUrl);
+      setupResultTransport();
       if (isLiveMode) {
         setProgress('Podgląd częściowy — konwersja trwa. Kliknij „Odśwież" aby załadować więcej.', 100, 100, null);
         showLiveReloadBanner();
       }
     } catch (_directError) {
-      // Fallback: format not playable directly — re-encode a short clip
-      setProgress('Bezpośrednie odtwarzanie niedostępne, przygotowuję fragment...', 5, 0, null);
-      void startPreviewGeneration();
+      // In result mode always prefer full-file compare and avoid 1-minute fallback generation.
+      setProgress('Nie udało się załadować pełnego porównania.', 0, 0, null);
+      setError('Ten format nie jest odtwarzalny bezpośrednio w podglądzie przeglądarki. Użyj "Otwórz" (VLC) albo przekoduj wynik do kompatybilnego kontenera.');
     }
   }
+}
+
+function setupResultTransport() {
+  const source = elements.videoOriginal;
+  const target = elements.videoEncoded;
+  const slider = elements.resultSeekSlider;
+  const currentEl = elements.resultSeekCurrent;
+  const durationEl = elements.resultSeekDuration;
+  const playPauseBtn = elements.resultPlayPauseBtn;
+
+  if (mode !== 'result' || !source || !target || !slider) {
+    return;
+  }
+
+  const refreshDuration = () => {
+    const duration = Number.isFinite(source.duration) ? Number(source.duration) : state.sourceDuration;
+    const safeDuration = Math.max(0, Number.isFinite(duration) ? duration : 0);
+    slider.max = String(safeDuration);
+    if (durationEl) {
+      durationEl.textContent = formatTime(safeDuration);
+    }
+  };
+
+  const refreshCurrent = () => {
+    const current = Math.max(0, Number(source.currentTime || 0));
+    if (!state.resultSeekDragging) {
+      slider.value = String(current);
+    }
+    if (currentEl) {
+      currentEl.textContent = formatTime(current);
+    }
+  };
+
+  const syncFromSlider = () => {
+    const time = Math.max(0, Number(slider.value || 0));
+    source.currentTime = time;
+    target.currentTime = time;
+    if (currentEl) {
+      currentEl.textContent = formatTime(time);
+    }
+  };
+
+  slider.addEventListener('pointerdown', () => {
+    state.resultSeekDragging = true;
+  });
+  slider.addEventListener('pointerup', () => {
+    state.resultSeekDragging = false;
+    syncFromSlider();
+  });
+  slider.addEventListener('pointercancel', () => {
+    state.resultSeekDragging = false;
+  });
+  slider.addEventListener('input', syncFromSlider);
+
+  if (playPauseBtn) {
+    playPauseBtn.addEventListener('click', () => {
+      if (source.paused) {
+        source.play().catch(() => {});
+      } else {
+        source.pause();
+      }
+    });
+  }
+
+  source.addEventListener('loadedmetadata', refreshDuration);
+  source.addEventListener('durationchange', refreshDuration);
+  source.addEventListener('timeupdate', refreshCurrent);
+  source.addEventListener('seeked', refreshCurrent);
+
+  refreshDuration();
+  refreshCurrent();
 }
 
 function updateTargetSizeHint() {
@@ -940,7 +1018,8 @@ function setupStagePanning() {
   };
 
   wrap.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || !state.panningEnabled) {
+    const panGesture = event.button === 1 || (event.button === 0 && event.altKey);
+    if (!panGesture || !state.panningEnabled) {
       return;
     }
 
@@ -957,6 +1036,7 @@ function setupStagePanning() {
     state.panStartScrollLeft = wrap.scrollLeft;
     state.panStartScrollTop = wrap.scrollTop;
     wrap.classList.add('is-panning');
+    event.preventDefault();
 
     if (typeof wrap.setPointerCapture === 'function') {
       try {

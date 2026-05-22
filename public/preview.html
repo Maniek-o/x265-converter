@@ -118,6 +118,18 @@
         </div>
       </section>
 
+      <section id="resultTransportCard" class="card result-transport" hidden>
+        <div class="result-transport-row">
+          <button id="resultPlayPauseBtn" class="ghost" type="button">Play / Pause</button>
+          <input id="resultSeekSlider" type="range" min="0" max="0" step="0.05" value="0">
+          <div class="result-transport-time">
+            <span id="resultSeekCurrent">00:00</span>
+            <span>/</span>
+            <span id="resultSeekDuration">00:00</span>
+          </div>
+        </div>
+      </section>
+
       <p id="errorText" class="error-text"></p>
     </main>
 

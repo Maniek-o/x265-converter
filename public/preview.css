@@ -431,6 +431,31 @@ button:disabled {
   min-height: 22px;
 }
 
+.result-transport {
+  display: none;
+}
+
+.result-transport-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+#resultSeekSlider {
+  width: 100%;
+}
+
+.result-transport-time {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 104px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 960px) {
   .control-grid {
     grid-template-columns: 1fr 1fr;
@@ -486,6 +511,32 @@ body.result-mode .stage-wrap {
   padding: 0;
   margin: 0;
   border-radius: 0;
+}
+
+body.result-mode .result-transport {
+  display: block;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  background: rgba(4, 4, 4, 0.94);
+  color: #dbe4ef;
+  padding: 10px 14px;
+}
+
+body.result-mode #resultPlayPauseBtn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f6fb;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+}
+
+body.result-mode #resultSeekSlider {
+  accent-color: #2bd66f;
+}
+
+body.result-mode .result-transport-time {
+  color: #c4d0de;
 }
 
 body.result-mode .stage {
